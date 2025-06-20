@@ -127,4 +127,4 @@ export const scalarCustomCss = `
   --theme-color-accent: var(--theme-color-1) !important;
   text-decoration: underline !important;
   cursor: pointer;
-}`
+}`;

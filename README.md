@@ -1,19 +1,19 @@
 <h1 align="center">
-Adonis AutoSwagger <br />
+Adonis Openapi <br />
 <img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Swagger-logo.png" height="50" />
 </h1>
 
-[![Version](https://img.shields.io/github/tag/ad-on-is/adonis-autoswagger.svg?style=flat?branch=main)]()
-[![GitHub stars](https://img.shields.io/github/stars/ad-on-is/adonis-autoswagger.svg?style=social&label=Star)]()
-[![GitHub watchers](https://img.shields.io/github/watchers/ad-on-is/adonis-autoswagger.svg?style=social&label=Watch)]()
-[![GitHub forks](https://img.shields.io/github/forks/ad-on-is/adonis-autoswagger.svg?style=social&label=Fork)]()
+[![Version](https://img.shields.io/github/tag/ad-on-is/adonis-openapi.svg?style=flat?branch=main)]()
+[![GitHub stars](https://img.shields.io/github/stars/ad-on-is/adonis-openapi.svg?style=social&label=Star)]()
+[![GitHub watchers](https://img.shields.io/github/watchers/ad-on-is/adonis-openapi.svg?style=social&label=Watch)]()
+[![GitHub forks](https://img.shields.io/github/forks/ad-on-is/adonis-openapi.svg?style=social&label=Fork)]()
 
 ### Auto-Generate swagger docs for AdonisJS
 
 ## 💻️ Install
 
 ```bash
-pnpm i adonis-autoswagger #using pnpm
+pnpm i adonis-openapi #using pnpm
 ```
 
 ---
@@ -76,40 +76,40 @@ In your `routes.ts`
 ## 6️⃣ for AdonisJS v6
 
 ```js
-import AutoSwagger from "adonis-autoswagger";
+import AdonisOpenapi from "adonis-openapi";
 import swagger from "#config/swagger";
 // returns swagger in YAML
 router.get("/swagger", async () => {
-  return AutoSwagger.default.docs(router.toJSON(), swagger);
+  return AdonisOpenapi.default.docs(router.toJSON(), swagger);
 });
 
 // Renders Swagger-UI and passes YAML-output of /swagger
 router.get("/docs", async () => {
-  return AutoSwagger.default.ui("/swagger", swagger);
-  // return AutoSwagger.default.scalar("/swagger"); to use Scalar instead. If you want, you can pass proxy url as second argument here.
-  // return AutoSwagger.default.rapidoc("/swagger", "view"); to use RapiDoc instead (pass "view" default, or "read" to change the render-style)
+  return AdonisOpenapi.default.ui("/swagger", swagger);
+  // return AdonisOpenapi.default.scalar("/swagger"); to use Scalar instead. If you want, you can pass proxy url as second argument here.
+  // return AdonisOpenapi.default.rapidoc("/swagger", "view"); to use RapiDoc instead (pass "view" default, or "read" to change the render-style)
 });
 ```
 
 ## 5️⃣ for AdonisJS v5
 
 ```js
-import AutoSwagger from "adonis-autoswagger";
+import AdonisOpenapi from "adonis-openapi";
 import swagger from "Config/swagger";
 // returns swagger in YAML
 Route.get("/swagger", async () => {
-  return AutoSwagger.docs(Route.toJSON(), swagger);
+  return AdonisOpenapi.docs(Route.toJSON(), swagger);
 });
 
 // Renders Swagger-UI and passes YAML-output of /swagger
 Route.get("/docs", async () => {
-  return AutoSwagger.ui("/swagger", swagger);
+  return AdonisOpenapi.ui("/swagger", swagger);
 });
 ```
 
 ### 👍️ Done
 
-Visit `http://localhost:3333/docs` to see AutoSwagger in action.
+Visit `http://localhost:3333/docs` to see AdonisOpenapi in action.
 
 ### Functions
 
@@ -165,25 +165,25 @@ Override the default security scheme.
 
 **authMiddlewares**
 
-If a route uses a middleware named `auth`, `auth:api`, AutoSwagger will detect it as a Swagger security method. However, you can implement other middlewares that handle authentication.
+If a route uses a middleware named `auth`, `auth:api`, AdonisOpenapi will detect it as a Swagger security method. However, you can implement other middlewares that handle authentication.
 
 ### Modify generated output
 
 ```ts
 Route.get("/myswagger", async () => {
-  const json = await AutoSwagger.json(Route.toJSON(), swagger);
+  const json = await AdonisOpenapi.json(Route.toJSON(), swagger);
   // modify json to your hearts content
-  return AutoSwagger.jsonToYaml(json);
+  return AdonisOpenapi.jsonToYaml(json);
 });
 
 Route.get("/docs", async () => {
-  return AutoSwagger.ui("/myswagger", swagger);
+  return AdonisOpenapi.ui("/myswagger", swagger);
 });
 ```
 
 ### Custom Paths in adonisJS v6
 
-AutoSwagger supports the paths set in `package.json`. Interfaces are expected to be in `app/interfaces`. However, you can override this, by modifying package.json as follows.
+AdonisOpenapi supports the paths set in `package.json`. Interfaces are expected to be in `app/interfaces`. However, you can override this, by modifying package.json as follows.
 
 ```json
 //...
@@ -210,7 +210,7 @@ Tags endpoints automatically
 
 ### `ignore`
 
-Ignores specified paths. When used with a wildcard (\*), AutoSwagger will ignore everything matching before/after the wildcard.
+Ignores specified paths. When used with a wildcard (\*), AdonisOpenapi will ignore everything matching before/after the wildcard.
 `/test/_`will ignore everything starting with`/test/`, whereas `\*/test`will ignore everything ending with`/test`.
 
 ### `common`
@@ -440,7 +440,7 @@ export default class SomeController {
 
 ## What does it do?
 
-AutoSwagger tries to extracat as much information as possible to generate swagger-docs for you.
+AdonisOpenapi tries to extracat as much information as possible to generate swagger-docs for you.
 
 ## Paths
 
@@ -468,7 +468,7 @@ Instead of using `param: any` you can now use custom interfaces `param: UserDeta
 
 ### Enums
 
-If you use enums in your models, AutoSwagger will detect them from `app/Types/` folder and add them to the schema.
+If you use enums in your models, AdonisOpenapi will detect them from `app/Types/` folder and add them to the schema.
 If you want to add enum on ExampleValue, you can use `.append(enumFieldExample)`
 
 Example:
@@ -492,7 +492,7 @@ The below comments MUST be placed **1 line** above the property.
 ---
 
 **@no-swagger**
-Although, autoswagger detects `serializeAs: null` fields automatically, and does not show them. You can use @no-swagger for other fields.
+Although, AdonisOpenapi detects `serializeAs: null` fields automatically, and does not show them. You can use @no-swagger for other fields.
 
 **@enum(foo, bar)**
 If a field has defined values, you can add them into an enum. This is usesfull for something like a status field.
@@ -543,7 +543,7 @@ To make it work in production environments, additional steps are required
 
   - This should create a new file in `commands/DocsGenerate.ts`
 
-- Use the provided [`DocsGenerate.ts.examle`](https://github.com/ad-on-is/adonis-autoswagger/blob/main/DocsGenerate.ts.example)/[`DocsGeneratev6.ts.example`](https://github.com/ad-on-is/adonis-autoswagger/blob/main/DocsGeneratev6.ts.example) and put its contents into your newly created `DocsGenerate.ts`
+- Use the provided [`DocsGenerate.ts.examle`](https://github.com/atassis/adonis-openapi/blob/main/DocsGenerate.ts.example)/[`DocsGeneratev6.ts.example`](https://github.com/atassis/adonis-openapi/blob/main/DocsGeneratev6.ts.example) and put its contents into your newly created `DocsGenerate.ts`
 
 - Modify `/start/env.ts` as follows
 
