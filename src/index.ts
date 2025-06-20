@@ -1,35 +1,30 @@
-import YAML from "json-to-pretty-yaml";
-import { readdir, readFile, stat, writeFile } from "fs/promises";
-import { existsSync } from "fs";
-import { join } from "path";
-import HTTPStatusCode from "http-status-code";
-import _ from "lodash";
-import { isEmpty, isUndefined } from "lodash";
-import { scalarCustomCss } from "./scalarCustomCss";
-import { serializeV6Middleware, serializeV6Handler } from "./adonishelpers";
-import {
-	CommentParser,
-	RouteParser,
-	ValidatorParser,
-	EnumParser,
-	parseModelProperties,
-} from "./parsers";
-import { parseInterfaces } from "./parsers/interface-parser";
-import type {
-	AdonisRoutes,
-	v6Handler,
-	AdonisRoute,
-	AdonisOpenapiOptions,
-} from "./types";
-
-import { mergeParams, formatOperationId } from "./helpers";
-import { ExampleGenerator, ExampleInterfaces } from "./example";
 // @ts-expect-error moduleResolution:nodenext issue 54523
-import { VineValidator } from "@vinejs/vine";
+
+import { existsSync } from 'node:fs';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { VineValidator } from '@vinejs/vine';
+import HTTPStatusCode from 'http-status-code';
+import YAML from 'json-to-pretty-yaml';
+import _, { isEmpty, isUndefined } from 'lodash';
+
+import { serializeV6Handler, serializeV6Middleware } from './adonishelpers';
+import { ExampleGenerator, ExampleInterfaces } from './example';
+import { formatOperationId, mergeParams } from './helpers';
+import {
+  CommentParser,
+  EnumParser,
+  extractRouteInfos,
+  parseModelProperties,
+  ValidatorParser,
+} from './parsers';
+import { parseInterfaces } from './parsers/interface-parser';
+import { scalarCustomCss } from './scalarCustomCss';
+import type { AdonisOpenapiOptions, AdonisRoute, AdonisRoutes, v6Handler } from './types';
 
 export type CustomPaths = Record<string, string>;
 
-export const renderRapidoc = (url: string, style = "view") => `<!doctype html>
+export const renderRapidoc = (url: string, style = 'view') => `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
@@ -87,7 +82,7 @@ export const renderSwaggerUI = (url: string, persistAuthorization = false) => `
   							SwaggerUIStandalonePreset
   						],
   						layout: "BaseLayout",
-            ${persistAuthorization ? "persistAuthorization: true," : ""}
+            ${persistAuthorization ? 'persistAuthorization: true,' : ''}
   					})
   				}
   		</script>
@@ -95,10 +90,7 @@ export const renderSwaggerUI = (url: string, persistAuthorization = false) => `
 </html>
 `;
 
-export const renderScalar = (
-	url: string,
-	proxyUrl: string = "https://proxy.scalar.com",
-) => `
+export const renderScalar = (url: string, proxyUrl = 'https://proxy.scalar.com') => `
 <!doctype html>
 <html>
   <head>
@@ -121,10 +113,7 @@ export const renderScalar = (
 </html>
     `;
 
-export const renderStoplight = (
-	url: string,
-	theme: "light" | "dark" = "dark",
-) => `
+export const renderStoplight = (url: string, theme: 'light' | 'dark' = 'dark') => `
 <!doctype html>
 <html data-theme="${theme}">
   <head>
@@ -146,732 +135,692 @@ export const renderStoplight = (
 `;
 
 async function getDataBasedOnAdonisVersion(
-	route: AdonisRoute,
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-	schemas: Record<string, any>,
+  route: AdonisRoute,
+  customPaths: CustomPaths,
+  options: AdonisOpenapiOptions,
+  schemas: Record<string, any>,
 ) {
-	let sourceFile = "";
-	let action = "";
-	let customAnnotations;
-	let operationId = "";
-	if (
-		route.meta.resolvedHandler !== null &&
-		route.meta.resolvedHandler !== undefined
-	) {
-		if (
-			typeof route.meta.resolvedHandler.namespace !== "undefined" &&
-			route.meta.resolvedHandler.method !== "handle"
-		) {
-			sourceFile = route.meta.resolvedHandler.namespace;
+  let sourceFile = '';
+  let action = '';
+  let customAnnotations;
+  let operationId = '';
+  if (route.meta.resolvedHandler !== null && route.meta.resolvedHandler !== undefined) {
+    if (
+      typeof route.meta.resolvedHandler.namespace !== 'undefined' &&
+      route.meta.resolvedHandler.method !== 'handle'
+    ) {
+      sourceFile = route.meta.resolvedHandler.namespace;
 
-			action = route.meta.resolvedHandler.method;
-			// If not defined by an annotation, use the combination of "controllerNameMethodName"
-			if (action !== "" && isUndefined(operationId) && route.handler) {
-				operationId = formatOperationId(route.handler as string);
-			}
-		}
-	}
+      action = route.meta.resolvedHandler.method;
+      // If not defined by an annotation, use the combination of "controllerNameMethodName"
+      if (action !== '' && isUndefined(operationId) && route.handler) {
+        operationId = formatOperationId(route.handler as string);
+      }
+    }
+  }
 
-	let v6handler = <v6Handler>route.handler;
-	if (
-		v6handler.reference !== null &&
-		v6handler.reference !== undefined &&
-		v6handler.reference !== ""
-	) {
-		if (!Array.isArray(v6handler.reference)) {
-			// handles magic strings
-			// router.resource('/test', '#controllers/test_controller')
-			[sourceFile, action] = v6handler.reference.split(".");
-			const split = sourceFile.split("/");
+  let v6handler = <v6Handler>route.handler;
+  if (
+    v6handler.reference !== null &&
+    v6handler.reference !== undefined &&
+    v6handler.reference !== ''
+  ) {
+    if (!Array.isArray(v6handler.reference)) {
+      // handles magic strings
+      // router.resource('/test', '#controllers/test_controller')
+      [sourceFile, action] = v6handler.reference.split('.');
+      const split = sourceFile.split('/');
 
-			if (split[0].includes("#")) {
-				sourceFile = sourceFile.replaceAll(split[0], customPaths[split[0]]);
-			} else {
-				sourceFile = options.appPath + "/controllers/" + sourceFile;
-			}
-			operationId = formatOperationId(v6handler.reference);
-		} else {
-			// handles lazy import
-			// const TestController = () => import('#controllers/test_controller')
-			v6handler = await serializeV6Handler(v6handler);
-			action = v6handler.method;
-			sourceFile = v6handler.moduleNameOrPath;
-			operationId = formatOperationId(sourceFile + "." + action);
-			const split = sourceFile.split("/");
-			if (split[0].includes("#")) {
-				sourceFile = sourceFile.replaceAll(split[0], customPaths[split[0]]);
-			} else {
-				sourceFile = options.appPath + "/" + sourceFile;
-			}
-		}
-	}
+      if (split[0].includes('#')) {
+        sourceFile = sourceFile.replaceAll(split[0], customPaths[split[0]]);
+      } else {
+        sourceFile = `${options.appPath}/controllers/${sourceFile}`;
+      }
+      operationId = formatOperationId(v6handler.reference);
+    } else {
+      // handles lazy import
+      // const TestController = () => import('#controllers/test_controller')
+      v6handler = await serializeV6Handler(v6handler);
+      action = v6handler.method;
+      sourceFile = v6handler.moduleNameOrPath;
+      operationId = formatOperationId(`${sourceFile}.${action}`);
+      const split = sourceFile.split('/');
+      if (split[0].includes('#')) {
+        sourceFile = sourceFile.replaceAll(split[0], customPaths[split[0]]);
+      } else {
+        sourceFile = `${options.appPath}/${sourceFile}`;
+      }
+    }
+  }
 
-	if (sourceFile !== "" && action !== "") {
-		sourceFile = sourceFile.replace("App/", "app/") + ".ts";
-		sourceFile = sourceFile.replace(".js", "");
-		const commentParser = new CommentParser(options);
-		commentParser.exampleGenerator = new ExampleGenerator(schemas);
+  if (sourceFile !== '' && action !== '') {
+    sourceFile = `${sourceFile.replace('App/', 'app/')}.ts`;
+    sourceFile = sourceFile.replace('.js', '');
+    const commentParser = new CommentParser(options);
+    commentParser.exampleGenerator = new ExampleGenerator(schemas);
 
-		customAnnotations = await commentParser.getAnnotations(sourceFile, action);
-	}
-	if (
-		typeof customAnnotations !== "undefined" &&
-		typeof customAnnotations.operationId !== "undefined" &&
-		customAnnotations.operationId !== ""
-	) {
-		operationId = customAnnotations.operationId;
-	}
-	if (options.debug) {
-		if (sourceFile !== "") {
-			console.log(
-				typeof customAnnotations !== "undefined" &&
-					!_.isEmpty(customAnnotations)
-					? `\x1b[32m✓ FOUND for ${action}\x1b[0m`
-					: `\x1b[33m✗ MISSING for ${action}\x1b[0m`,
+    customAnnotations = await commentParser.getAnnotations(sourceFile, action);
+  }
+  if (
+    typeof customAnnotations !== 'undefined' &&
+    typeof customAnnotations.operationId !== 'undefined' &&
+    customAnnotations.operationId !== ''
+  ) {
+    operationId = customAnnotations.operationId;
+  }
+  if (options.debug) {
+    if (sourceFile !== '') {
+      console.log(
+        typeof customAnnotations !== 'undefined' && !_.isEmpty(customAnnotations)
+          ? `\x1b[32m✓ FOUND for ${action}\x1b[0m`
+          : `\x1b[33m✗ MISSING for ${action}\x1b[0m`,
 
-				`${sourceFile} (${route.methods[0].toUpperCase()} ${route.pattern})`,
-			);
-		}
-	}
-	return { sourceFile, action, customAnnotations, operationId };
+        `${sourceFile} (${route.methods[0].toUpperCase()} ${route.pattern})`,
+      );
+    }
+  }
+  return { sourceFile, action, customAnnotations, operationId };
 }
 export function jsonToYaml(json: any) {
-	return YAML.stringify(json);
+  return YAML.stringify(json);
 }
 
-async function readLocalFile(rootPath: string, type = "yml") {
-	const filePath = rootPath + "openapi." + type;
-	const data = await readFile(filePath, "utf-8");
-	if (!data) {
-		console.error("Error reading file");
-		return;
-	}
-	return data;
+async function readLocalFile(rootPath: string, type = 'yml') {
+  const filePath = `${rootPath}openapi.${type}`;
+  const data = await readFile(filePath, 'utf-8');
+  if (!data) {
+    console.error('Error reading file');
+    return;
+  }
+  return data;
 }
 
 async function getFiles(dir: string, files_: string[] = []) {
-	var files = await readdir(dir);
-	for (let i in files) {
-		var name = dir + "/" + files[i];
-		if ((await stat(name)).isDirectory()) {
-			await getFiles(name, files_);
-		} else {
-			files_.push(name);
-		}
-	}
-	return files_;
+  var files = await readdir(dir);
+  for (const i in files) {
+    var name = `${dir}/${files[i]}`;
+    if ((await stat(name)).isDirectory()) {
+      await getFiles(name, files_);
+    } else {
+      files_.push(name);
+    }
+  }
+  return files_;
 }
 
-async function getInterfaces(
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-) {
-	let interfaces = {
-		...ExampleInterfaces.paginationInterface(),
-	};
-	let p = join(options.appPath, "Interfaces");
-	let p6 = join(options.appPath, "interfaces");
+async function getInterfaces(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
+  let interfaces = {
+    ...ExampleInterfaces.paginationInterface(),
+  };
+  let p = join(options.appPath, 'Interfaces');
+  let p6 = join(options.appPath, 'interfaces');
 
-	if (typeof customPaths["#interfaces"] !== "undefined") {
-		// it's v6
-		p6 = p6.replaceAll("app/interfaces", customPaths["#interfaces"]);
-		p6 = p6.replaceAll("app\\interfaces", customPaths["#interfaces"]);
-	}
+  if (typeof customPaths['#interfaces'] !== 'undefined') {
+    // it's v6
+    p6 = p6.replaceAll('app/interfaces', customPaths['#interfaces']);
+    p6 = p6.replaceAll('app\\interfaces', customPaths['#interfaces']);
+  }
 
-	if (!existsSync(p) && !existsSync(p6)) {
-		if (options.debug) {
-			console.log("Interface paths don't exist", p, p6);
-		}
-		return interfaces;
-	}
-	if (existsSync(p6)) {
-		p = p6;
-	}
-	const files = await getFiles(p, []);
-	if (options.debug) {
-		console.log("Found interfaces files", files);
-	}
-	for (let file of files) {
-		file = file.replace(".js", "");
-		const data = await readFile(file, "utf8");
-		file = file.replace(".ts", "");
-		interfaces = {
-			...interfaces,
-			...parseInterfaces(data),
-		};
-	}
+  if (!existsSync(p) && !existsSync(p6)) {
+    if (options.debug) {
+      console.log("Interface paths don't exist", p, p6);
+    }
+    return interfaces;
+  }
+  if (existsSync(p6)) {
+    p = p6;
+  }
+  const files = await getFiles(p, []);
+  if (options.debug) {
+    console.log('Found interfaces files', files);
+  }
+  for (let file of files) {
+    file = file.replace('.js', '');
+    const data = await readFile(file, 'utf8');
+    file = file.replace('.ts', '');
+    interfaces = {
+      ...interfaces,
+      ...parseInterfaces(data),
+    };
+  }
 
-	return interfaces;
+  return interfaces;
 }
 
-async function getSerializers(
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-) {
-	const serializers = {};
-	let p6 = join(options.appPath, "serializers");
+async function getSerializers(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
+  const serializers = {};
+  let p6 = join(options.appPath, 'serializers');
 
-	if (typeof customPaths["#serializers"] !== "undefined") {
-		// it's v6
-		p6 = p6.replaceAll("app/serializers", customPaths["#serializers"]);
-		p6 = p6.replaceAll("app\\serializers", customPaths["#serializers"]);
-	}
+  if (typeof customPaths['#serializers'] !== 'undefined') {
+    // it's v6
+    p6 = p6.replaceAll('app/serializers', customPaths['#serializers']);
+    p6 = p6.replaceAll('app\\serializers', customPaths['#serializers']);
+  }
 
-	if (!existsSync(p6)) {
-		if (options.debug) {
-			console.log("Serializers paths don't exist", p6);
-		}
-		return serializers;
-	}
+  if (!existsSync(p6)) {
+    if (options.debug) {
+      console.log("Serializers paths don't exist", p6);
+    }
+    return serializers;
+  }
 
-	const files = await getFiles(p6, []);
-	if (options.debug) {
-		console.log("Found serializer files", files);
-	}
+  const files = await getFiles(p6, []);
+  if (options.debug) {
+    console.log('Found serializer files', files);
+  }
 
-	for (let file of files) {
-		if (/^[a-zA-Z]:/.test(file)) {
-			file = "file:///" + file;
-		}
+  for (let file of files) {
+    if (/^[a-zA-Z]:/.test(file)) {
+      file = `file:///${file}`;
+    }
 
-		const val = await import(file);
+    const val = await import(file);
 
-		for (const [key, value] of Object.entries(val)) {
-			if (key.indexOf("Serializer") > -1) {
-				serializers[key] = value;
-			}
-		}
-	}
+    for (const [key, value] of Object.entries(val)) {
+      if (key.indexOf('Serializer') > -1) {
+        serializers[key] = value;
+      }
+    }
+  }
 
-	return serializers;
+  return serializers;
 }
 
-async function getModels(
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-) {
-	const models = {};
-	let p = join(options.appPath, "Models");
-	let p6 = join(options.appPath, "models");
+async function getModels(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
+  const models = {};
+  let p = join(options.appPath, 'Models');
+  let p6 = join(options.appPath, 'models');
 
-	if (typeof customPaths["#models"] !== "undefined") {
-		// it's v6
-		p6 = p6.replaceAll("app/models", customPaths["#models"]);
-		p6 = p6.replaceAll("app\\models", customPaths["#models"]);
-	}
+  if (typeof customPaths['#models'] !== 'undefined') {
+    // it's v6
+    p6 = p6.replaceAll('app/models', customPaths['#models']);
+    p6 = p6.replaceAll('app\\models', customPaths['#models']);
+  }
 
-	if (!existsSync(p) && !existsSync(p6)) {
-		if (options.debug) {
-			console.log("Model paths don't exist", p, p6);
-		}
-		return models;
-	}
-	if (existsSync(p6)) {
-		p = p6;
-	}
-	const files = await getFiles(p, []);
-	if (options.debug) {
-		console.log("Found model files", files);
-	}
-	for (let file of files) {
-		file = file.replace(".js", "");
-		const data = await readFile(file, "utf8");
-		file = file.replace(".ts", "");
-		const split = file.split("/");
-		let name = split[split.length - 1].replace(".ts", "");
-		file = file.replace("app/", "/app/");
-		const parsed = parseModelProperties(options.snakeCase, data);
-		if (parsed.name !== "") {
-			name = parsed.name;
-		}
-		let schema = {
-			type: "object",
-			required: parsed.required,
-			properties: parsed.props,
-			description: name + " (Model)",
-		};
-		models[name] = schema;
-	}
-	return models;
+  if (!existsSync(p) && !existsSync(p6)) {
+    if (options.debug) {
+      console.log("Model paths don't exist", p, p6);
+    }
+    return models;
+  }
+  if (existsSync(p6)) {
+    p = p6;
+  }
+  const files = await getFiles(p, []);
+  if (options.debug) {
+    console.log('Found model files', files);
+  }
+  for (let file of files) {
+    file = file.replace('.js', '');
+    const data = await readFile(file, 'utf8');
+    file = file.replace('.ts', '');
+    const split = file.split('/');
+    let name = split[split.length - 1].replace('.ts', '');
+    file = file.replace('app/', '/app/');
+    const parsed = parseModelProperties(options.snakeCase, data);
+    if (parsed.name !== '') {
+      name = parsed.name;
+    }
+    const schema = {
+      type: 'object',
+      required: parsed.required,
+      properties: parsed.props,
+      description: `${name} (Model)`,
+    };
+    models[name] = schema;
+  }
+  return models;
 }
 
-async function getValidators(
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-) {
-	const validators = {};
-	let p6 = join(options.appPath, "validators");
+async function getValidators(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
+  const validators = {};
+  let p6 = join(options.appPath, 'validators');
 
-	if (typeof customPaths["#validators"] !== "undefined") {
-		// it's v6
-		p6 = p6.replaceAll("app/validators", customPaths["#validators"]);
-		p6 = p6.replaceAll("app\\validators", customPaths["#validators"]);
-	}
+  if (typeof customPaths['#validators'] !== 'undefined') {
+    // it's v6
+    p6 = p6.replaceAll('app/validators', customPaths['#validators']);
+    p6 = p6.replaceAll('app\\validators', customPaths['#validators']);
+  }
 
-	if (!existsSync(p6)) {
-		if (options.debug) {
-			console.log("Validators paths don't exist", p6);
-		}
-		return validators;
-	}
+  if (!existsSync(p6)) {
+    if (options.debug) {
+      console.log("Validators paths don't exist", p6);
+    }
+    return validators;
+  }
 
-	const files = await getFiles(p6, []);
-	if (options.debug) {
-		console.log("Found validator files", files);
-	}
+  const files = await getFiles(p6, []);
+  if (options.debug) {
+    console.log('Found validator files', files);
+  }
 
-	try {
-		for (let file of files) {
-			if (/^[a-zA-Z]:/.test(file)) {
-				file = "file:///" + file;
-			}
+  try {
+    for (let file of files) {
+      if (/^[a-zA-Z]:/.test(file)) {
+        file = `file:///${file}`;
+      }
 
-			const val = await import(file);
-			for (const [key, value] of Object.entries(val)) {
-				if (value.constructor.name.includes("VineValidator")) {
-					validators[key] = await new ValidatorParser().validatorToObject(
-						value as VineValidator<any, any>,
-					);
-					validators[key].description = key + " (Validator)";
-				}
-			}
-		}
-	} catch (e) {
-		console.log(
-			"**You are probably using 'node ace serve --hmr', which is not supported yet. Use 'node ace serve --watch' instead.**",
-		);
-		console.error(e.message);
-	}
+      const val = await import(file);
+      for (const [key, value] of Object.entries(val)) {
+        if (value.constructor.name.includes('VineValidator')) {
+          validators[key] = await new ValidatorParser().validatorToObject(
+            value as VineValidator<any, any>,
+          );
+          validators[key].description = `${key} (Validator)`;
+        }
+      }
+    }
+  } catch (e) {
+    console.log(
+      "**You are probably using 'node ace serve --hmr', which is not supported yet. Use 'node ace serve --watch' instead.**",
+    );
+    console.error(e.message);
+  }
 
-	return validators;
+  return validators;
 }
 
-async function getEnums(
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-) {
-	let enums = {};
+async function getEnums(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
+  let enums = {};
 
-	const enumParser = new EnumParser();
+  const enumParser = new EnumParser();
 
-	let p = join(options.appPath, "Types");
-	let p6 = join(options.appPath, "types");
+  let p = join(options.appPath, 'Types');
+  let p6 = join(options.appPath, 'types');
 
-	if (typeof customPaths["#types"] !== "undefined") {
-		// it's v6
-		p6 = p6.replaceAll("app/types", customPaths["#types"]);
-		p6 = p6.replaceAll("app\\types", customPaths["#types"]);
-	}
+  if (typeof customPaths['#types'] !== 'undefined') {
+    // it's v6
+    p6 = p6.replaceAll('app/types', customPaths['#types']);
+    p6 = p6.replaceAll('app\\types', customPaths['#types']);
+  }
 
-	if (!existsSync(p) && !existsSync(p6)) {
-		if (options.debug) {
-			console.log("Enum paths don't exist", p, p6);
-		}
-		return enums;
-	}
+  if (!existsSync(p) && !existsSync(p6)) {
+    if (options.debug) {
+      console.log("Enum paths don't exist", p, p6);
+    }
+    return enums;
+  }
 
-	if (existsSync(p6)) {
-		p = p6;
-	}
+  if (existsSync(p6)) {
+    p = p6;
+  }
 
-	const files = await getFiles(p, []);
-	if (options.debug) {
-		console.log("Found enum files", files);
-	}
+  const files = await getFiles(p, []);
+  if (options.debug) {
+    console.log('Found enum files', files);
+  }
 
-	for (let file of files) {
-		file = file.replace(".js", "");
-		const data = await readFile(file, "utf8");
-		file = file.replace(".ts", "");
-		const split = file.split("/");
-		const name = split[split.length - 1].replace(".ts", "");
-		file = file.replace("app/", "/app/");
+  for (let file of files) {
+    file = file.replace('.js', '');
+    const data = await readFile(file, 'utf8');
+    file = file.replace('.ts', '');
+    const split = file.split('/');
+    const _name = split[split.length - 1].replace('.ts', '');
+    file = file.replace('app/', '/app/');
 
-		const parsedEnums = enumParser.parseEnums(data);
-		enums = {
-			...enums,
-			...parsedEnums,
-		};
-	}
+    const parsedEnums = enumParser.parseEnums(data);
+    enums = {
+      ...enums,
+      ...parsedEnums,
+    };
+  }
 
-	return enums;
+  return enums;
 }
 
-const getSchemas = async (
-	customPaths: CustomPaths,
-	options: AdonisOpenapiOptions,
-) => ({
-	Any: {
-		description: "Any JSON object not defined as schema",
-	},
-	...(await getInterfaces(customPaths, options)),
-	...(await getSerializers(customPaths, options)),
-	...(await getModels(customPaths, options)),
-	...(await getValidators(customPaths, options)),
-	...(await getEnums(customPaths, options)),
+const getSchemas = async (customPaths: CustomPaths, options: AdonisOpenapiOptions) => ({
+  Any: {
+    description: 'Any JSON object not defined as schema',
+  },
+  ...(await getInterfaces(customPaths, options)),
+  ...(await getSerializers(customPaths, options)),
+  ...(await getModels(customPaths, options)),
+  ...(await getValidators(customPaths, options)),
+  ...(await getEnums(customPaths, options)),
 });
 
 export class AdonisOpenapi {
-	private options: AdonisOpenapiOptions;
-	private schemas = {};
-	private commentParser: CommentParser;
-	private routeParser: RouteParser;
-	private customPaths = {};
+  private options: AdonisOpenapiOptions;
+  private schemas = {};
+  private customPaths = {};
 
-	async json(routes: any, options: AdonisOpenapiOptions) {
-		if (process.env.NODE_ENV === (options.productionEnv || "production")) {
-			const str = await readLocalFile(options.path, "json");
-			return JSON.parse(str);
-		}
-		return await this.generate(routes, options);
-	}
+  async json(routes: any, options: AdonisOpenapiOptions) {
+    if (process.env.NODE_ENV === (options.productionEnv || 'production')) {
+      const str = await readLocalFile(options.path, 'json');
+      return JSON.parse(str);
+    }
+    return await this.generate(routes, options);
+  }
 
-	async writeFile(routes: any, options: AdonisOpenapiOptions) {
-		const json = await this.generate(routes, options);
-		const contents = jsonToYaml(json);
-		const filePathYml = options.path + "openapi.yml";
-		const filePathJson = options.path + "openapi.json";
-		const outputFileExtensions = options.outputFileExtensions || "both";
-		if (outputFileExtensions === "both" || outputFileExtensions === "yml") {
-			await writeFile(filePathYml, contents);
-		}
-		if (outputFileExtensions === "both" || outputFileExtensions === "json") {
-			await writeFile(filePathJson, JSON.stringify(json, null, 2));
-		}
-	}
+  async writeFile(routes: any, options: AdonisOpenapiOptions) {
+    const json = await this.generate(routes, options);
+    const contents = jsonToYaml(json);
+    const filePathYml = `${options.path}openapi.yml`;
+    const filePathJson = `${options.path}openapi.json`;
+    const outputFileExtensions = options.outputFileExtensions || 'both';
+    if (outputFileExtensions === 'both' || outputFileExtensions === 'yml') {
+      await writeFile(filePathYml, contents);
+    }
+    if (outputFileExtensions === 'both' || outputFileExtensions === 'json') {
+      await writeFile(filePathJson, JSON.stringify(json, null, 2));
+    }
+  }
 
-	async docs(routes: any, options: AdonisOpenapiOptions) {
-		if (process.env.NODE_ENV === (options.productionEnv || "production")) {
-			return readLocalFile(options.path);
-		}
-		return jsonToYaml(await this.generate(routes, options));
-	}
+  async docs(routes: any, options: AdonisOpenapiOptions) {
+    if (process.env.NODE_ENV === (options.productionEnv || 'production')) {
+      return readLocalFile(options.path);
+    }
+    return jsonToYaml(await this.generate(routes, options));
+  }
 
-	private async generate(
-		adonisRoutes: AdonisRoutes,
-		options: AdonisOpenapiOptions,
-	) {
-		this.options = {
-			...{
-				snakeCase: true,
-				preferredPutPatch: "PUT",
-				debug: false,
-			},
-			...options,
-		};
+  private async generate(adonisRoutes: AdonisRoutes, options: AdonisOpenapiOptions) {
+    this.options = {
+      ...{
+        snakeCase: true,
+        preferredPutPatch: 'PUT',
+        debug: false,
+      },
+      ...options,
+    };
 
-		const routes = adonisRoutes.root;
-		this.options.appPath = this.options.path + "app";
+    const routes = adonisRoutes.root;
+    this.options.appPath = `${this.options.path}app`;
 
-		try {
-			const pj = await readFile(join(this.options.path, "package.json"));
+    try {
+      const pj = await readFile(join(this.options.path, 'package.json'));
 
-			const pjson = JSON.parse(pj.toString());
-			if (pjson.imports) {
-				Object.entries(pjson.imports).forEach(([key, value]) => {
-					const k = (key as string).replaceAll("/*", "");
-					this.customPaths[k] = (value as string)
-						.replaceAll("/*.js", "")
-						.replaceAll("./", "");
-				});
-			}
-		} catch (e) {
-			console.error(e);
-		}
+      const pjson = JSON.parse(pj.toString());
+      if (pjson.imports) {
+        Object.entries(pjson.imports).forEach(([key, value]) => {
+          const k = (key as string).replaceAll('/*', '');
+          this.customPaths[k] = (value as string).replaceAll('/*.js', '').replaceAll('./', '');
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
-		this.routeParser = new RouteParser(this.options);
+    this.schemas = await getSchemas(this.customPaths, {
+      snakeCase: true,
+      preferredPutPatch: 'PUT',
+      debug: false,
+      ...this.options,
+    });
+    if (this.options.debug) {
+      console.log(this.options);
+      console.log('Found Schemas', Object.keys(this.schemas));
+      console.log('Using custom paths', this.customPaths);
+    }
+    new CommentParser(this.options).exampleGenerator = new ExampleGenerator(this.schemas);
 
-		this.schemas = await getSchemas(this.customPaths, {
-			snakeCase: true,
-			preferredPutPatch: "PUT",
-			debug: false,
-			...this.options,
-		});
-		if (this.options.debug) {
-			console.log(this.options);
-			console.log("Found Schemas", Object.keys(this.schemas));
-			console.log("Using custom paths", this.customPaths);
-		}
-		new CommentParser(this.options).exampleGenerator = new ExampleGenerator(
-			this.schemas,
-		);
+    const docs = {
+      openapi: '3.0.0',
+      info: options.info || {
+        title: options.title,
+        version: options.version,
+        description:
+          options.description ||
+          'Generated by AdonisJS Openapi https://github.com/atassis/adonis-openapi',
+      },
 
-		const docs = {
-			openapi: "3.0.0",
-			info: options.info || {
-				title: options.title,
-				version: options.version,
-				description:
-					options.description ||
-					"Generated by AdonisJS Openapi https://github.com/atassis/adonis-openapi",
-			},
+      components: {
+        responses: {
+          Forbidden: {
+            description: 'Access token is missing or invalid',
+          },
+          Accepted: {
+            description: 'The request was accepted',
+          },
+          Created: {
+            description: 'The resource has been created',
+          },
+          NotFound: {
+            description: 'The resource has been created',
+          },
+          NotAcceptable: {
+            description: 'The resource has been created',
+          },
+        },
+        securitySchemes: {
+          BearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+          },
+          BasicAuth: {
+            type: 'http',
+            scheme: 'basic',
+          },
+          ApiKeyAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'X-API-Key',
+          },
+          ...this.options.securitySchemes,
+        },
+        schemas: this.schemas,
+      },
+      paths: {},
+      tags: [],
+    };
+    let paths = {};
 
-			components: {
-				responses: {
-					Forbidden: {
-						description: "Access token is missing or invalid",
-					},
-					Accepted: {
-						description: "The request was accepted",
-					},
-					Created: {
-						description: "The resource has been created",
-					},
-					NotFound: {
-						description: "The resource has been created",
-					},
-					NotAcceptable: {
-						description: "The resource has been created",
-					},
-				},
-				securitySchemes: {
-					BearerAuth: {
-						type: "http",
-						scheme: "bearer",
-					},
-					BasicAuth: {
-						type: "http",
-						scheme: "basic",
-					},
-					ApiKeyAuth: {
-						type: "apiKey",
-						in: "header",
-						name: "X-API-Key",
-					},
-					...this.options.securitySchemes,
-				},
-				schemas: this.schemas,
-			},
-			paths: {},
-			tags: [],
-		};
-		let paths = {};
+    let sscheme = 'BearerAuth';
+    if (this.options.defaultSecurityScheme) {
+      sscheme = this.options.defaultSecurityScheme;
+    }
 
-		let sscheme = "BearerAuth";
-		if (this.options.defaultSecurityScheme) {
-			sscheme = this.options.defaultSecurityScheme;
-		}
+    const securities = {
+      auth: { [sscheme]: ['access'] },
+      'auth:api': { [sscheme]: ['access'] },
+      ...this.options.authMiddlewares
+        ?.map((am) => ({
+          [am]: { [sscheme]: ['access'] },
+        }))
+        .reduce((acc, val) => ({ ...acc, ...val }), {}),
+    };
 
-		let securities = {
-			auth: { [sscheme]: ["access"] },
-			"auth:api": { [sscheme]: ["access"] },
-			...this.options.authMiddlewares
-				?.map((am) => ({
-					[am]: { [sscheme]: ["access"] },
-				}))
-				.reduce((acc, val) => ({ ...acc, ...val }), {}),
-		};
+    const globalTags = [];
 
-		let globalTags = [];
+    if (this.options.debug) {
+      console.log('Route annotations:');
+      console.log('Checking if controllers have propper comment annotations');
+      console.log('-----');
+    }
 
-		if (this.options.debug) {
-			console.log("Route annotations:");
-			console.log("Checking if controllers have propper comment annotations");
-			console.log("-----");
-		}
+    for await (const route of routes) {
+      let ignore = false;
+      for (const i of options.ignore) {
+        if (
+          route.pattern === i ||
+          (i.endsWith('*') && route.pattern.startsWith(i.slice(0, -1))) ||
+          (i.startsWith('*') && route.pattern.endsWith(i.slice(1)))
+        ) {
+          ignore = true;
+          break;
+        }
+      }
+      if (ignore) continue;
 
-		for await (const route of routes) {
-			let ignore = false;
-			for (const i of options.ignore) {
-				if (
-					route.pattern == i ||
-					(i.endsWith("*") && route.pattern.startsWith(i.slice(0, -1))) ||
-					(i.startsWith("*") && route.pattern.endsWith(i.slice(1)))
-				) {
-					ignore = true;
-					break;
-				}
-			}
-			if (ignore) continue;
+      const security = [];
+      const responseCodes = {
+        GET: '200',
+        POST: '201',
+        DELETE: '202',
+        PUT: '204',
+      };
 
-			let security = [];
-			const responseCodes = {
-				GET: "200",
-				POST: "201",
-				DELETE: "202",
-				PUT: "204",
-			};
+      if (!Array.isArray(route.middleware)) {
+        route.middleware = serializeV6Middleware(route.middleware) as string[];
+      }
 
-			if (!Array.isArray(route.middleware)) {
-				route.middleware = serializeV6Middleware(route.middleware) as string[];
-			}
+      (route.middleware as string[]).forEach((m) => {
+        if (typeof securities[m] !== 'undefined') {
+          security.push(securities[m]);
+        }
+      });
 
-			(route.middleware as string[]).forEach((m) => {
-				if (typeof securities[m] !== "undefined") {
-					security.push(securities[m]);
-				}
-			});
+      let { tags, parameters, pattern } = extractRouteInfos(this.options, route.pattern);
 
-			let { tags, parameters, pattern } = this.routeParser.extractInfos(
-				route.pattern,
-			);
+      tags.forEach((tag) => {
+        if (globalTags.filter((e) => e.name === tag).length > 0) return;
+        if (tag === '') return;
+        globalTags.push({
+          name: tag,
+          description: `Everything related to ${tag}`,
+        });
+      });
 
-			tags.forEach((tag) => {
-				if (globalTags.filter((e) => e.name === tag).length > 0) return;
-				if (tag === "") return;
-				globalTags.push({
-					name: tag,
-					description: "Everything related to " + tag,
-				});
-			});
+      const { sourceFile, action, customAnnotations } = await getDataBasedOnAdonisVersion(
+        route,
+        this.customPaths,
+        options,
+        this.schemas,
+      );
 
-			const { sourceFile, action, customAnnotations } =
-				await getDataBasedOnAdonisVersion(
-					route,
-					this.customPaths,
-					options,
-					this.schemas,
-				);
+      route.methods.forEach((method) => {
+        let responses = {};
+        if (method === 'HEAD') return;
 
-			route.methods.forEach((method) => {
-				let responses = {};
-				if (method === "HEAD") return;
+        if (
+          route.methods.includes('PUT') &&
+          route.methods.includes('PATCH') &&
+          method !== this.options.preferredPutPatch
+        )
+          return;
 
-				if (
-					route.methods.includes("PUT") &&
-					route.methods.includes("PATCH") &&
-					method !== this.options.preferredPutPatch
-				)
-					return;
+        let description = '';
+        let summary = '';
+        let tag = '';
+        let operationId: string;
 
-				let description = "";
-				let summary = "";
-				let tag = "";
-				let operationId: string;
+        if (security.length > 0) {
+          responses['401'] = {
+            description: `Returns **401** (${HTTPStatusCode.getMessage(401)})`,
+          };
+          responses['403'] = {
+            description: `Returns **403** (${HTTPStatusCode.getMessage(403)})`,
+          };
+        }
 
-				if (security.length > 0) {
-					responses["401"] = {
-						description: `Returns **401** (${HTTPStatusCode.getMessage(401)})`,
-					};
-					responses["403"] = {
-						description: `Returns **403** (${HTTPStatusCode.getMessage(403)})`,
-					};
-				}
+        let requestBody = {
+          content: {
+            'application/json': {},
+          },
+        };
 
-				let requestBody = {
-					content: {
-						"application/json": {},
-					},
-				};
+        let actionParams = {};
 
-				let actionParams = {};
+        if (action !== '' && typeof customAnnotations[action] !== 'undefined') {
+          description = customAnnotations[action].description;
+          summary = customAnnotations[action].summary;
+          operationId = customAnnotations[action].operationId;
+          responses = { ...responses, ...customAnnotations[action].responses };
+          requestBody = customAnnotations[action].requestBody;
+          actionParams = customAnnotations[action].parameters;
+          tag = customAnnotations[action].tag;
+        }
+        parameters = mergeParams(parameters, actionParams);
 
-				if (action !== "" && typeof customAnnotations[action] !== "undefined") {
-					description = customAnnotations[action].description;
-					summary = customAnnotations[action].summary;
-					operationId = customAnnotations[action].operationId;
-					responses = { ...responses, ...customAnnotations[action].responses };
-					requestBody = customAnnotations[action].requestBody;
-					actionParams = customAnnotations[action].parameters;
-					tag = customAnnotations[action].tag;
-				}
-				parameters = mergeParams(parameters, actionParams);
+        if (tag !== '') {
+          globalTags.push({
+            name: tag.toUpperCase(),
+            description: `Everything related to ${tag.toUpperCase()}`,
+          });
+          tags = [tag.toUpperCase()];
+        }
 
-				if (tag != "") {
-					globalTags.push({
-						name: tag.toUpperCase(),
-						description: "Everything related to " + tag.toUpperCase(),
-					});
-					tags = [tag.toUpperCase()];
-				}
+        if (isEmpty(responses)) {
+          responses[responseCodes[method]] = {
+            description: HTTPStatusCode.getMessage(responseCodes[method]),
+            content: {
+              'application/json': {},
+            },
+          };
+        } else {
+          if (
+            typeof responses[responseCodes[method]] !== 'undefined' &&
+            typeof responses[responseCodes[method]].summary !== 'undefined'
+          ) {
+            if (summary === '') {
+              summary = responses[responseCodes[method]].summary;
+            }
+            delete responses[responseCodes[method]].summary;
+          }
+          if (
+            typeof responses[responseCodes[method]] !== 'undefined' &&
+            typeof responses[responseCodes[method]].description !== 'undefined'
+          ) {
+            description = responses[responseCodes[method]].description;
+          }
+        }
 
-				if (isEmpty(responses)) {
-					responses[responseCodes[method]] = {
-						description: HTTPStatusCode.getMessage(responseCodes[method]),
-						content: {
-							"application/json": {},
-						},
-					};
-				} else {
-					if (
-						typeof responses[responseCodes[method]] !== "undefined" &&
-						typeof responses[responseCodes[method]]["summary"] !== "undefined"
-					) {
-						if (summary === "") {
-							summary = responses[responseCodes[method]]["summary"];
-						}
-						delete responses[responseCodes[method]]["summary"];
-					}
-					if (
-						typeof responses[responseCodes[method]] !== "undefined" &&
-						typeof responses[responseCodes[method]]["description"] !==
-							"undefined"
-					) {
-						description = responses[responseCodes[method]]["description"];
-					}
-				}
+        if (action !== '' && summary === '') {
+          // Solve toLowerCase undefined exception
+          // https://github.com/atassis/adonis-openapi/issues/28
+          tags[0] = tags[0] ?? '';
 
-				if (action !== "" && summary === "") {
-					// Solve toLowerCase undefined exception
-					// https://github.com/atassis/adonis-openapi/issues/28
-					tags[0] = tags[0] ?? "";
+          switch (action) {
+            case 'index':
+              summary = `Get a list of ${tags[0].toLowerCase()}`;
+              break;
+            case 'show':
+              summary = `Get a single instance of ${tags[0].toLowerCase()}`;
+              break;
+            case 'update':
+              summary = `Update ${tags[0].toLowerCase()}`;
+              break;
+            case 'destroy':
+              summary = `Delete ${tags[0].toLowerCase()}`;
+              break;
+            case 'store':
+              summary = `Create ${tags[0].toLowerCase()}`;
+              break;
+            // frontend defaults
+            case 'create':
+              summary = `Create (Frontend) ${tags[0].toLowerCase()}`;
+              break;
+            case 'edit':
+              summary = `Update (Frontend) ${tags[0].toLowerCase()}`;
+              break;
+          }
+        }
 
-					switch (action) {
-						case "index":
-							summary = "Get a list of " + tags[0].toLowerCase();
-							break;
-						case "show":
-							summary = "Get a single instance of " + tags[0].toLowerCase();
-							break;
-						case "update":
-							summary = "Update " + tags[0].toLowerCase();
-							break;
-						case "destroy":
-							summary = "Delete " + tags[0].toLowerCase();
-							break;
-						case "store":
-							summary = "Create " + tags[0].toLowerCase();
-							break;
-						// frontend defaults
-						case "create":
-							summary = "Create (Frontend) " + tags[0].toLowerCase();
-							break;
-						case "edit":
-							summary = "Update (Frontend) " + tags[0].toLowerCase();
-							break;
-					}
-				}
+        const _sf = sourceFile.split('/').at(-1).replace('.ts', '');
+        const m = {
+          summary: `${summary}${action !== '' ? ` (${action})` : 'route'}`,
+          description: `${description}\n\n _${sourceFile}_ - **${action}**`,
+          operationId: operationId,
+          parameters: parameters,
+          tags: tags,
+          responses: responses,
+          security: security,
+        };
 
-				const sf = sourceFile.split("/").at(-1).replace(".ts", "");
-				let m = {
-					summary: `${summary}${action !== "" ? ` (${action})` : "route"}`,
-					description:
-						description + "\n\n _" + sourceFile + "_ - **" + action + "**",
-					operationId: operationId,
-					parameters: parameters,
-					tags: tags,
-					responses: responses,
-					security: security,
-				};
+        if (method !== 'GET' && method !== 'DELETE') {
+          m.requestBody = requestBody;
+        }
 
-				if (method !== "GET" && method !== "DELETE") {
-					m["requestBody"] = requestBody;
-				}
+        pattern = pattern.slice(1);
+        if (pattern === '') {
+          pattern = '/';
+        }
 
-				pattern = pattern.slice(1);
-				if (pattern === "") {
-					pattern = "/";
-				}
+        paths = {
+          ...paths,
+          [pattern]: { ...paths[pattern], [method.toLowerCase()]: m },
+        };
+      });
+    }
 
-				paths = {
-					...paths,
-					[pattern]: { ...paths[pattern], [method.toLowerCase()]: m },
-				};
-			});
-		}
+    // filter unused tags
+    const usedTags = _.uniq(
+      Object.entries(paths).flatMap(([_p, val]) => Object.entries(val)[0][1].tags),
+    );
 
-		// filter unused tags
-		const usedTags = _.uniq(
-			Object.entries(paths)
-				.map(([p, val]) => Object.entries(val)[0][1].tags)
-				.flat(),
-		);
-
-		docs.tags = globalTags.filter((tag) => usedTags.includes(tag.name));
-		docs.paths = paths;
-		return docs;
-	}
+    docs.tags = globalTags.filter((tag) => usedTags.includes(tag.name));
+    docs.paths = paths;
+    return docs;
+  }
 }
 
 export default new AdonisOpenapi();

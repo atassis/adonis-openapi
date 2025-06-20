@@ -1,0 +1,85 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              [":PACKAGE:", ":NODE:", ":PACKAGE_WITH_PROTOCOL:", ":URL:", ":BUN:"],
+              ":BLANK_LINE:",
+              [":ALIAS:"],
+              ":BLANK_LINE:",
+              [":PATH:"]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "json": {
+    "parser": {
+      "allowComments": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "enabled": true,
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "lineWidth": 100,
+      "trailingCommas": "all"
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "vcs": {
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "enabled": true
+  },
+  "linter": {
+    "rules": {
+      "style": {
+        "useImportType": "off",
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error"
+      },
+      "a11y": {
+        "useValidAnchor": "info",
+        "useSemanticElements": "info"
+      },
+      "suspicious": {
+        "noDebugger": {
+          "fix": "none",
+          "level": "error"
+        }
+      },
+      "correctness": {
+        "noUnusedImports": "warn",
+        "noUnreachable": "error",
+        "noUnusedVariables": "warn",
+        "noUndeclaredVariables": "error"
+      }
+    }
+  },
+  "files": {
+    "includes": ["**", "!**/dist/", "!**/build/", "!**/*.gen.ts"],
+    "maxSize": 18446744073709551615
+  }
+}
