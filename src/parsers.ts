@@ -12,7 +12,7 @@ import {
 	snakeCase,
 	startCase,
 } from "lodash";
-import ExampleGenerator from "./example";
+import { ExampleGenerator } from "./example";
 import type { AdonisOpenapiOptions } from "./types";
 import { standardTypes } from "./types";
 import _ from "lodash";
@@ -512,255 +512,243 @@ export class RouteParser {
 		return { tags, parameters, pattern };
 	}
 }
-
-export class ModelParser {
-	exampleGenerator: ExampleGenerator;
-	snakeCase: boolean;
-	constructor(snakeCase: boolean) {
-		this.snakeCase = snakeCase;
-		this.exampleGenerator = new ExampleGenerator({});
-	}
-
-	parseModelProperties(data) {
-		let props = {};
-		let required = [];
-		// remove empty lines
-		data = data.replace(/\t/g, "").replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, "");
-		const lines = data.split("\n");
-		let softDelete = false;
-		let name = "";
-		lines.forEach((line, index) => {
-			line = line.trim();
-			// skip comments
-			if (line.startsWith("export default class")) {
-				name = line.split(" ")[3];
-			}
-			if (
-				line.includes("@swagger-softdelete") ||
-				line.includes("SoftDeletes")
-			) {
-				softDelete = true;
-			}
-
-			if (
-				line.startsWith("//") ||
-				line.startsWith("/*") ||
-				line.startsWith("*") ||
-				line.startsWith("public static ") ||
-				line.startsWith("private static ") ||
-				line.startsWith("static ")
-			)
-				return;
-
-			if (index > 0 && lines[index - 1].includes("serializeAs: null")) return;
-			if (index > 0 && lines[index - 1].includes("@no-swagger")) return;
-			if (
-				!line.startsWith("public ") &&
-				!line.startsWith("public get") &&
-				!line.includes("declare ")
-			)
-				return;
-
-			let s = [];
-
-			if (line.includes("declare ")) {
-				s = line.split("declare ");
-			}
-			if (line.startsWith("public ")) {
-				if (line.startsWith("public get")) {
-					s = line.split("public get");
-					let s2 = s[1].replace(/;/g, "").split(":");
-				} else {
-					s = line.split("public ");
-				}
-			}
-
-			let s2 = s[1].replace(/;/g, "").split(":");
-
-			let field = s2[0];
-			let type = s2[1] || "";
-			type = type.trim();
-			let enums = [];
-			let format = "";
-			let keyprops = {};
-			let example: any = null;
-
-			if (index > 0 && lines[index - 1].includes("@enum")) {
-				const l = lines[index - 1];
-				let en = getBetweenBrackets(l, "enum");
-				if (en !== "") {
-					enums = en.split(",");
-					example = enums[0];
-				}
-			}
-
-			if (index > 0 && lines[index - 1].includes("@format")) {
-				const l = lines[index - 1];
-				let en = getBetweenBrackets(l, "format");
-				if (en !== "") {
-					format = en;
-				}
-			}
-
-			if (index > 0 && lines[index - 1].includes("@example")) {
-				const l = lines[index - 1];
-				let match = l.match(/example\(([^()]*)\)/g);
-				if (match !== null) {
-					const m = match[0].replace("example(", "").replace(")", "");
-					example = m;
-					if (type === "number") {
-						example = parseInt(m);
-					}
-				}
-			}
-
-			if (index > 0 && lines[index - 1].includes("@required")) {
-				required.push(field);
-			}
-
-			if (index > 0 && lines[index - 1].includes("@props")) {
-				const l = lines[index - 1].replace("@props", "props");
-				const j = getBetweenBrackets(l, "props");
-				if (isJSONString(j)) {
-					keyprops = JSON.parse(j);
-				}
-			}
-
-			if (typeof type === "undefined") {
-				type = "string";
-				format = "";
-			}
-
-			field = field.trim();
-
-			type = type.trim();
-
-			//TODO: make oneOf
-			if (type.includes(" | ")) {
-				const types = type.split(" | ");
-				type = types.filter((t) => t !== "null")[0];
-			}
-
-			field = field.replace("()", "");
-			field = field.replace("get ", "");
-			type = type.replace("{", "").trim();
-
-			if (this.snakeCase) {
-				field = snakeCase(field);
-			}
-
-			let indicator = "type";
-
-			if (example === null) {
-				example = "string";
-			}
-
-			// if relation to another model
-			if (type.includes("typeof")) {
-				s = type.split("typeof ");
-				type = "#/components/schemas/" + s[1].slice(0, -1);
-				indicator = "$ref";
-			} else {
-				if (standardTypes.includes(type.toLowerCase())) {
-					type = type.toLowerCase();
-				} else {
-					// assume its a custom interface
-					indicator = "$ref";
-					type = "#/components/schemas/" + type;
-				}
-			}
-			type = type.trim();
-			let isArray = false;
-
-			if (
-				line.includes("HasMany") ||
-				line.includes("ManyToMany") ||
-				line.includes("HasManyThrough") ||
-				type.includes("[]")
-			) {
-				isArray = true;
-				if (type.slice(type.length - 2, type.length) === "[]") {
-					type = type.split("[]")[0];
-				}
-			}
-			if (example === null || example === "string") {
-				example =
-					this.exampleGenerator.exampleByField(field) ||
-					this.exampleGenerator.exampleByType(type);
-			}
-
-			if (type === "datetime") {
-				indicator = "type";
-				type = "string";
-				format = "date-time";
-			}
-
-			if (type === "date") {
-				indicator = "type";
-				type = "string";
-				format = "date";
-			}
-
-			if (field === "email") {
-				indicator = "type";
-				type = "string";
-				format = "email";
-			}
-			if (field === "password") {
-				indicator = "type";
-				type = "string";
-				format = "password";
-			}
-
-			if (enums.length > 0) {
-				indicator = "type";
-				type = "string";
-			}
-
-			if (type === "any") {
-				indicator = "$ref";
-				type = "#/components/schemas/Any";
-			}
-
-			let prop = {};
-			if (type === "integer" || type === "number") {
-				if (example === null || example === "string") {
-					example = Math.floor(Math.random() * 1000);
-				}
-			}
-			if (type === "boolean") {
-				example = true;
-			}
-
-			prop[indicator] = type;
-			prop["example"] = example;
-			// if array
-			if (isArray) {
-				props[field] = { type: "array", items: prop };
-			} else {
-				props[field] = prop;
-				if (format !== "") {
-					props[field]["format"] = format;
-				}
-			}
-			Object.entries(keyprops).map(([key, value]) => {
-				props[field][key] = value;
-			});
-			if (enums.length > 0) {
-				props[field]["enum"] = enums;
-			}
-		});
-
-		if (softDelete) {
-			props["deleted_at"] = {
-				type: "string",
-				format: "date-time",
-				example: "2021-03-23T16:13:08.489+01:00",
-			};
+export function parseModelProperties(snakecase: boolean, data) {
+	const exampleGenerator = new ExampleGenerator({});
+	let props = {};
+	let required = [];
+	// remove empty lines
+	data = data.replace(/\t/g, "").replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, "");
+	const lines = data.split("\n");
+	let softDelete = false;
+	let name = "";
+	lines.forEach((line, index) => {
+		line = line.trim();
+		// skip comments
+		if (line.startsWith("export default class")) {
+			name = line.split(" ")[3];
+		}
+		if (line.includes("@swagger-softdelete") || line.includes("SoftDeletes")) {
+			softDelete = true;
 		}
 
-		return { name: name, props: props, required: required };
+		if (
+			line.startsWith("//") ||
+			line.startsWith("/*") ||
+			line.startsWith("*") ||
+			line.startsWith("public static ") ||
+			line.startsWith("private static ") ||
+			line.startsWith("static ")
+		)
+			return;
+
+		if (index > 0 && lines[index - 1].includes("serializeAs: null")) return;
+		if (index > 0 && lines[index - 1].includes("@no-swagger")) return;
+		if (
+			!line.startsWith("public ") &&
+			!line.startsWith("public get") &&
+			!line.includes("declare ")
+		)
+			return;
+
+		let s = [];
+
+		if (line.includes("declare ")) {
+			s = line.split("declare ");
+		}
+		if (line.startsWith("public ")) {
+			if (line.startsWith("public get")) {
+				s = line.split("public get");
+				let s2 = s[1].replace(/;/g, "").split(":");
+			} else {
+				s = line.split("public ");
+			}
+		}
+
+		let s2 = s[1].replace(/;/g, "").split(":");
+
+		let field = s2[0];
+		let type = s2[1] || "";
+		type = type.trim();
+		let enums = [];
+		let format = "";
+		let keyprops = {};
+		let example: any = null;
+
+		if (index > 0 && lines[index - 1].includes("@enum")) {
+			const l = lines[index - 1];
+			let en = getBetweenBrackets(l, "enum");
+			if (en !== "") {
+				enums = en.split(",");
+				example = enums[0];
+			}
+		}
+
+		if (index > 0 && lines[index - 1].includes("@format")) {
+			const l = lines[index - 1];
+			let en = getBetweenBrackets(l, "format");
+			if (en !== "") {
+				format = en;
+			}
+		}
+
+		if (index > 0 && lines[index - 1].includes("@example")) {
+			const l = lines[index - 1];
+			let match = l.match(/example\(([^()]*)\)/g);
+			if (match !== null) {
+				const m = match[0].replace("example(", "").replace(")", "");
+				example = m;
+				if (type === "number") {
+					example = parseInt(m);
+				}
+			}
+		}
+
+		if (index > 0 && lines[index - 1].includes("@required")) {
+			required.push(field);
+		}
+
+		if (index > 0 && lines[index - 1].includes("@props")) {
+			const l = lines[index - 1].replace("@props", "props");
+			const j = getBetweenBrackets(l, "props");
+			if (isJSONString(j)) {
+				keyprops = JSON.parse(j);
+			}
+		}
+
+		if (typeof type === "undefined") {
+			type = "string";
+			format = "";
+		}
+
+		field = field.trim();
+
+		type = type.trim();
+
+		//TODO: make oneOf
+		if (type.includes(" | ")) {
+			const types = type.split(" | ");
+			type = types.filter((t) => t !== "null")[0];
+		}
+
+		field = field.replace("()", "");
+		field = field.replace("get ", "");
+		type = type.replace("{", "").trim();
+
+		if (snakeCase) {
+			field = snakeCase(field);
+		}
+
+		let indicator = "type";
+
+		if (example === null) {
+			example = "string";
+		}
+
+		// if relation to another model
+		if (type.includes("typeof")) {
+			s = type.split("typeof ");
+			type = "#/components/schemas/" + s[1].slice(0, -1);
+			indicator = "$ref";
+		} else {
+			if (standardTypes.includes(type.toLowerCase())) {
+				type = type.toLowerCase();
+			} else {
+				// assume its a custom interface
+				indicator = "$ref";
+				type = "#/components/schemas/" + type;
+			}
+		}
+		type = type.trim();
+		let isArray = false;
+
+		if (
+			line.includes("HasMany") ||
+			line.includes("ManyToMany") ||
+			line.includes("HasManyThrough") ||
+			type.includes("[]")
+		) {
+			isArray = true;
+			if (type.slice(type.length - 2, type.length) === "[]") {
+				type = type.split("[]")[0];
+			}
+		}
+		if (example === null || example === "string") {
+			example =
+				exampleGenerator.exampleByField(field) ||
+				exampleGenerator.exampleByType(type);
+		}
+
+		if (type === "datetime") {
+			indicator = "type";
+			type = "string";
+			format = "date-time";
+		}
+
+		if (type === "date") {
+			indicator = "type";
+			type = "string";
+			format = "date";
+		}
+
+		if (field === "email") {
+			indicator = "type";
+			type = "string";
+			format = "email";
+		}
+		if (field === "password") {
+			indicator = "type";
+			type = "string";
+			format = "password";
+		}
+
+		if (enums.length > 0) {
+			indicator = "type";
+			type = "string";
+		}
+
+		if (type === "any") {
+			indicator = "$ref";
+			type = "#/components/schemas/Any";
+		}
+
+		let prop = {};
+		if (type === "integer" || type === "number") {
+			if (example === null || example === "string") {
+				example = Math.floor(Math.random() * 1000);
+			}
+		}
+		if (type === "boolean") {
+			example = true;
+		}
+
+		prop[indicator] = type;
+		prop["example"] = example;
+		// if array
+		if (isArray) {
+			props[field] = { type: "array", items: prop };
+		} else {
+			props[field] = prop;
+			if (format !== "") {
+				props[field]["format"] = format;
+			}
+		}
+		Object.entries(keyprops).map(([key, value]) => {
+			props[field][key] = value;
+		});
+		if (enums.length > 0) {
+			props[field]["enum"] = enums;
+		}
+	});
+
+	if (softDelete) {
+		props["deleted_at"] = {
+			type: "string",
+			format: "date-time",
+			example: "2021-03-23T16:13:08.489+01:00",
+		};
 	}
+
+	return { name: name, props: props, required: required };
 }
 
 export class ValidatorParser {
@@ -937,268 +925,6 @@ export class ValidatorParser {
 			if (!p["isOptional"]) obj[p["fieldName"]]["required"] = true;
 		}
 		return obj;
-	}
-}
-
-export class InterfaceParser {
-	exampleGenerator: ExampleGenerator;
-	snakeCase: boolean;
-	schemas: any = {};
-
-	constructor(snakeCase: boolean, schemas: any = {}) {
-		this.snakeCase = snakeCase;
-		this.exampleGenerator = new ExampleGenerator({});
-		this.schemas = schemas;
-	}
-
-	objToExample(obj) {
-		let example = {};
-		Object.entries(obj).map(([key, value]) => {
-			if (typeof value === "object") {
-				example[key] = this.objToExample(value);
-			} else {
-				example[key] = this.exampleGenerator.exampleByType(value as string);
-				if (example[key] === null) {
-					example[key] = this.exampleGenerator.exampleByField(key);
-				}
-			}
-		});
-		return example;
-	}
-
-	parseProps(obj) {
-		const no = {};
-		Object.entries(obj).map(([f, value]) => {
-			if (typeof value === "object") {
-				no[f.replaceAll("?", "")] = {
-					type: "object",
-					nullable: f.includes("?"),
-					properties: this.parseProps(value),
-					example: this.objToExample(value),
-				};
-			} else {
-				no[f.replaceAll("?", "")] = {
-					...this.parseType(value, f),
-				};
-			}
-		});
-		return no;
-	}
-
-	getInheritedProperties(baseType: string): any {
-		if (this.schemas[baseType]?.properties) {
-			return {
-				properties: this.schemas[baseType].properties,
-				required: this.schemas[baseType].required || [],
-			};
-		}
-
-		const cleanType = baseType
-			.split("/")
-			.pop()
-			?.replace(".ts", "")
-			?.replace(/^[#@]/, "");
-
-		if (!cleanType) return { properties: {}, required: [] };
-
-		if (this.schemas[cleanType]?.properties) {
-			return {
-				properties: this.schemas[cleanType].properties,
-				required: this.schemas[cleanType].required || [],
-			};
-		}
-
-		const variations = [
-			cleanType,
-			`#models/${cleanType}`,
-			cleanType.replace(/Model$/, ""),
-			`${cleanType}Model`,
-		];
-
-		for (const variation of variations) {
-			if (this.schemas[variation]?.properties) {
-				return {
-					properties: this.schemas[variation].properties,
-					required: this.schemas[variation].required || [],
-				};
-			}
-		}
-
-		return { properties: {}, required: [] };
-	}
-
-	parseInterfaces(data) {
-		data = data.replace(/\t/g, "").replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, "");
-
-		let currentInterface = null;
-		const interfaces = {};
-		const interfaceDefinitions = new Map();
-
-		const lines = data.split("\n");
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i].trim();
-			const isDefault = line.startsWith("export default interface");
-
-			if (
-				line.startsWith("interface") ||
-				line.startsWith("export interface") ||
-				isDefault
-			) {
-				const sp = line.split(/\s+/);
-				const idx = line.endsWith("}") ? sp.length - 1 : sp.length - 2;
-				const name = sp[idx].split(/[{\s]/)[0];
-				const extendedTypes = this.parseExtends(line);
-				interfaceDefinitions.set(name, {
-					extends: extendedTypes,
-					properties: {},
-					required: [],
-					startLine: i,
-				});
-				currentInterface = name;
-				continue;
-			}
-
-			if (currentInterface && line === "}") {
-				currentInterface = null;
-				continue;
-			}
-
-			if (
-				currentInterface &&
-				line &&
-				!line.startsWith("//") &&
-				!line.startsWith("/*") &&
-				!line.startsWith("*")
-			) {
-				const def = interfaceDefinitions.get(currentInterface);
-				if (def) {
-					const previousLine = i > 0 ? lines[i - 1].trim() : "";
-					const isRequired = previousLine.includes("@required");
-
-					const [prop, type] = line.split(":").map((s) => s.trim());
-					if (prop && type) {
-						const cleanProp = prop.replace("?", "");
-						def.properties[cleanProp] = type.replace(";", "");
-
-						if (isRequired || !prop.includes("?")) {
-							def.required.push(cleanProp);
-						}
-					}
-				}
-			}
-		}
-
-		for (const [name, def] of interfaceDefinitions) {
-			let allProperties = {};
-			let requiredFields = new Set(def.required);
-
-			for (const baseType of def.extends) {
-				const baseSchema = this.schemas[baseType];
-				if (baseSchema) {
-					if (baseSchema.properties) {
-						Object.assign(allProperties, baseSchema.properties);
-					}
-
-					if (baseSchema.required) {
-						baseSchema.required.forEach((field) => requiredFields.add(field));
-					}
-				}
-			}
-
-			Object.assign(allProperties, def.properties);
-
-			const parsedProperties = {};
-			for (const [key, value] of Object.entries(allProperties)) {
-				if (typeof value === "object" && value !== null && "type" in value) {
-					parsedProperties[key] = value;
-				} else {
-					parsedProperties[key] = this.parseType(value, key);
-				}
-			}
-
-			const schema = {
-				type: "object",
-				properties: parsedProperties,
-				required: Array.from(requiredFields),
-				description: `${name}${def.extends.length ? ` extends ${def.extends.join(", ")}` : ""} (Interface)`,
-			};
-
-			if (schema.required.length === 0) {
-				delete schema.required;
-			}
-
-			interfaces[name] = schema;
-		}
-
-		return interfaces;
-	}
-
-	parseExtends(line: string): string[] {
-		const matches = line.match(/extends\s+([^{]+)/);
-		if (!matches) return [];
-
-		return matches[1]
-			.split(",")
-			.map((type) => type.trim())
-			.map((type) => {
-				const cleanType = type.split("/").pop();
-				return cleanType?.replace(/\.ts$/, "") || type;
-			});
-	}
-
-	parseType(type: string | any, field: string) {
-		if (typeof type === "object" && type !== null && "type" in type) {
-			return type;
-		}
-
-		let isArray = false;
-		if (typeof type === "string" && type.includes("[]")) {
-			type = type.replace("[]", "");
-			isArray = true;
-		}
-
-		if (typeof type === "string") {
-			type = type.replace(/[;\r\n]/g, "").trim();
-		}
-
-		let prop: any = { type: type };
-		let notRequired = field.includes("?");
-		prop.nullable = notRequired;
-
-		if (typeof type === "string" && type.toLowerCase() === "datetime") {
-			prop.type = "string";
-			prop.format = "date-time";
-			prop.example = "2021-03-23T16:13:08.489+01:00";
-		} else if (typeof type === "string" && type.toLowerCase() === "date") {
-			prop.type = "string";
-			prop.format = "date";
-			prop.example = "2021-03-23";
-		} else {
-			const standardTypes = ["string", "number", "boolean", "integer"];
-			if (
-				typeof type === "string" &&
-				!standardTypes.includes(type.toLowerCase())
-			) {
-				delete prop.type;
-				prop.$ref = `#/components/schemas/${type}`;
-			} else {
-				if (typeof type === "string") {
-					prop.type = type.toLowerCase();
-				}
-				prop.example =
-					this.exampleGenerator.exampleByType(type) ||
-					this.exampleGenerator.exampleByField(field);
-			}
-		}
-
-		if (isArray) {
-			return {
-				type: "array",
-				items: prop,
-			};
-		}
-
-		return prop;
 	}
 }
 

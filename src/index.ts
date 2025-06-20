@@ -8,14 +8,13 @@ import { isEmpty, isUndefined } from "lodash";
 import { scalarCustomCss } from "./scalarCustomCss";
 import { serializeV6Middleware, serializeV6Handler } from "./adonishelpers";
 import {
-	InterfaceParser,
-	ModelParser,
 	CommentParser,
 	RouteParser,
 	ValidatorParser,
 	EnumParser,
+	parseModelProperties,
 } from "./parsers";
-
+import { parseInterfaces } from "./parsers/interface-parser";
 import type {
 	AdonisRoutes,
 	v6Handler,
@@ -24,9 +23,11 @@ import type {
 } from "./types";
 
 import { mergeParams, formatOperationId } from "./helpers";
-import ExampleGenerator, { ExampleInterfaces } from "./example";
+import { ExampleGenerator, ExampleInterfaces } from "./example";
 // @ts-expect-error moduleResolution:nodenext issue 54523
 import { VineValidator } from "@vinejs/vine";
+
+export type CustomPaths = Record<string, string>;
 
 export const renderRapidoc = (url: string, style = "view") => `<!doctype html>
 <html>
@@ -146,9 +147,9 @@ export const renderStoplight = (
 
 async function getDataBasedOnAdonisVersion(
 	route: AdonisRoute,
-	commentParser: CommentParser,
-	customPaths: Record<string, string>,
+	customPaths: CustomPaths,
 	options: AdonisOpenapiOptions,
+	schemas: Record<string, any>,
 ) {
 	let sourceFile = "";
 	let action = "";
@@ -209,6 +210,8 @@ async function getDataBasedOnAdonisVersion(
 	if (sourceFile !== "" && action !== "") {
 		sourceFile = sourceFile.replace("App/", "app/") + ".ts";
 		sourceFile = sourceFile.replace(".js", "");
+		const commentParser = new CommentParser(options);
+		commentParser.exampleGenerator = new ExampleGenerator(schemas);
 
 		customAnnotations = await commentParser.getAnnotations(sourceFile, action);
 	}
@@ -247,15 +250,273 @@ async function readLocalFile(rootPath: string, type = "yml") {
 	return data;
 }
 
+async function getFiles(dir: string, files_: string[] = []) {
+	var files = await readdir(dir);
+	for (let i in files) {
+		var name = dir + "/" + files[i];
+		if ((await stat(name)).isDirectory()) {
+			await getFiles(name, files_);
+		} else {
+			files_.push(name);
+		}
+	}
+	return files_;
+}
+
+async function getInterfaces(
+	customPaths: CustomPaths,
+	options: AdonisOpenapiOptions,
+) {
+	let interfaces = {
+		...ExampleInterfaces.paginationInterface(),
+	};
+	let p = join(options.appPath, "Interfaces");
+	let p6 = join(options.appPath, "interfaces");
+
+	if (typeof customPaths["#interfaces"] !== "undefined") {
+		// it's v6
+		p6 = p6.replaceAll("app/interfaces", customPaths["#interfaces"]);
+		p6 = p6.replaceAll("app\\interfaces", customPaths["#interfaces"]);
+	}
+
+	if (!existsSync(p) && !existsSync(p6)) {
+		if (options.debug) {
+			console.log("Interface paths don't exist", p, p6);
+		}
+		return interfaces;
+	}
+	if (existsSync(p6)) {
+		p = p6;
+	}
+	const files = await getFiles(p, []);
+	if (options.debug) {
+		console.log("Found interfaces files", files);
+	}
+	for (let file of files) {
+		file = file.replace(".js", "");
+		const data = await readFile(file, "utf8");
+		file = file.replace(".ts", "");
+		interfaces = {
+			...interfaces,
+			...parseInterfaces(data),
+		};
+	}
+
+	return interfaces;
+}
+
+async function getSerializers(
+	customPaths: CustomPaths,
+	options: AdonisOpenapiOptions,
+) {
+	const serializers = {};
+	let p6 = join(options.appPath, "serializers");
+
+	if (typeof customPaths["#serializers"] !== "undefined") {
+		// it's v6
+		p6 = p6.replaceAll("app/serializers", customPaths["#serializers"]);
+		p6 = p6.replaceAll("app\\serializers", customPaths["#serializers"]);
+	}
+
+	if (!existsSync(p6)) {
+		if (options.debug) {
+			console.log("Serializers paths don't exist", p6);
+		}
+		return serializers;
+	}
+
+	const files = await getFiles(p6, []);
+	if (options.debug) {
+		console.log("Found serializer files", files);
+	}
+
+	for (let file of files) {
+		if (/^[a-zA-Z]:/.test(file)) {
+			file = "file:///" + file;
+		}
+
+		const val = await import(file);
+
+		for (const [key, value] of Object.entries(val)) {
+			if (key.indexOf("Serializer") > -1) {
+				serializers[key] = value;
+			}
+		}
+	}
+
+	return serializers;
+}
+
+async function getModels(
+	customPaths: CustomPaths,
+	options: AdonisOpenapiOptions,
+) {
+	const models = {};
+	let p = join(options.appPath, "Models");
+	let p6 = join(options.appPath, "models");
+
+	if (typeof customPaths["#models"] !== "undefined") {
+		// it's v6
+		p6 = p6.replaceAll("app/models", customPaths["#models"]);
+		p6 = p6.replaceAll("app\\models", customPaths["#models"]);
+	}
+
+	if (!existsSync(p) && !existsSync(p6)) {
+		if (options.debug) {
+			console.log("Model paths don't exist", p, p6);
+		}
+		return models;
+	}
+	if (existsSync(p6)) {
+		p = p6;
+	}
+	const files = await getFiles(p, []);
+	if (options.debug) {
+		console.log("Found model files", files);
+	}
+	for (let file of files) {
+		file = file.replace(".js", "");
+		const data = await readFile(file, "utf8");
+		file = file.replace(".ts", "");
+		const split = file.split("/");
+		let name = split[split.length - 1].replace(".ts", "");
+		file = file.replace("app/", "/app/");
+		const parsed = parseModelProperties(options.snakeCase, data);
+		if (parsed.name !== "") {
+			name = parsed.name;
+		}
+		let schema = {
+			type: "object",
+			required: parsed.required,
+			properties: parsed.props,
+			description: name + " (Model)",
+		};
+		models[name] = schema;
+	}
+	return models;
+}
+
+async function getValidators(
+	customPaths: CustomPaths,
+	options: AdonisOpenapiOptions,
+) {
+	const validators = {};
+	let p6 = join(options.appPath, "validators");
+
+	if (typeof customPaths["#validators"] !== "undefined") {
+		// it's v6
+		p6 = p6.replaceAll("app/validators", customPaths["#validators"]);
+		p6 = p6.replaceAll("app\\validators", customPaths["#validators"]);
+	}
+
+	if (!existsSync(p6)) {
+		if (options.debug) {
+			console.log("Validators paths don't exist", p6);
+		}
+		return validators;
+	}
+
+	const files = await getFiles(p6, []);
+	if (options.debug) {
+		console.log("Found validator files", files);
+	}
+
+	try {
+		for (let file of files) {
+			if (/^[a-zA-Z]:/.test(file)) {
+				file = "file:///" + file;
+			}
+
+			const val = await import(file);
+			for (const [key, value] of Object.entries(val)) {
+				if (value.constructor.name.includes("VineValidator")) {
+					validators[key] = await new ValidatorParser().validatorToObject(
+						value as VineValidator<any, any>,
+					);
+					validators[key].description = key + " (Validator)";
+				}
+			}
+		}
+	} catch (e) {
+		console.log(
+			"**You are probably using 'node ace serve --hmr', which is not supported yet. Use 'node ace serve --watch' instead.**",
+		);
+		console.error(e.message);
+	}
+
+	return validators;
+}
+
+async function getEnums(
+	customPaths: CustomPaths,
+	options: AdonisOpenapiOptions,
+) {
+	let enums = {};
+
+	const enumParser = new EnumParser();
+
+	let p = join(options.appPath, "Types");
+	let p6 = join(options.appPath, "types");
+
+	if (typeof customPaths["#types"] !== "undefined") {
+		// it's v6
+		p6 = p6.replaceAll("app/types", customPaths["#types"]);
+		p6 = p6.replaceAll("app\\types", customPaths["#types"]);
+	}
+
+	if (!existsSync(p) && !existsSync(p6)) {
+		if (options.debug) {
+			console.log("Enum paths don't exist", p, p6);
+		}
+		return enums;
+	}
+
+	if (existsSync(p6)) {
+		p = p6;
+	}
+
+	const files = await getFiles(p, []);
+	if (options.debug) {
+		console.log("Found enum files", files);
+	}
+
+	for (let file of files) {
+		file = file.replace(".js", "");
+		const data = await readFile(file, "utf8");
+		file = file.replace(".ts", "");
+		const split = file.split("/");
+		const name = split[split.length - 1].replace(".ts", "");
+		file = file.replace("app/", "/app/");
+
+		const parsedEnums = enumParser.parseEnums(data);
+		enums = {
+			...enums,
+			...parsedEnums,
+		};
+	}
+
+	return enums;
+}
+
+const getSchemas = async (
+	customPaths: CustomPaths,
+	options: AdonisOpenapiOptions,
+) => ({
+	Any: {
+		description: "Any JSON object not defined as schema",
+	},
+	...(await getInterfaces(customPaths, options)),
+	...(await getSerializers(customPaths, options)),
+	...(await getModels(customPaths, options)),
+	...(await getValidators(customPaths, options)),
+	...(await getEnums(customPaths, options)),
+});
+
 export class AdonisOpenapi {
 	private options: AdonisOpenapiOptions;
 	private schemas = {};
 	private commentParser: CommentParser;
-	private modelParser: ModelParser;
-	private interfaceParser: InterfaceParser;
-	private enumParser: EnumParser;
 	private routeParser: RouteParser;
-	private validatorParser: ValidatorParser;
 	private customPaths = {};
 
 	async json(routes: any, options: AdonisOpenapiOptions) {
@@ -319,19 +580,22 @@ export class AdonisOpenapi {
 			console.error(e);
 		}
 
-		this.commentParser = new CommentParser(this.options);
 		this.routeParser = new RouteParser(this.options);
-		this.modelParser = new ModelParser(this.options.snakeCase);
-		this.interfaceParser = new InterfaceParser(this.options.snakeCase);
-		this.validatorParser = new ValidatorParser();
-		this.enumParser = new EnumParser();
-		this.schemas = await this.getSchemas();
+
+		this.schemas = await getSchemas(this.customPaths, {
+			snakeCase: true,
+			preferredPutPatch: "PUT",
+			debug: false,
+			...this.options,
+		});
 		if (this.options.debug) {
 			console.log(this.options);
 			console.log("Found Schemas", Object.keys(this.schemas));
 			console.log("Using custom paths", this.customPaths);
 		}
-		this.commentParser.exampleGenerator = new ExampleGenerator(this.schemas);
+		new CommentParser(this.options).exampleGenerator = new ExampleGenerator(
+			this.schemas,
+		);
 
 		const docs = {
 			openapi: "3.0.0",
@@ -455,9 +719,9 @@ export class AdonisOpenapi {
 			const { sourceFile, action, customAnnotations } =
 				await getDataBasedOnAdonisVersion(
 					route,
-					this.commentParser,
 					this.customPaths,
 					options,
+					this.schemas,
 				);
 
 			route.methods.forEach((method) => {
@@ -607,259 +871,6 @@ export class AdonisOpenapi {
 		docs.tags = globalTags.filter((tag) => usedTags.includes(tag.name));
 		docs.paths = paths;
 		return docs;
-	}
-
-	private async getSchemas() {
-		let schemas = {
-			Any: {
-				description: "Any JSON object not defined as schema",
-			},
-		};
-
-		schemas = {
-			...schemas,
-			...(await this.getInterfaces()),
-			...(await this.getSerializers()),
-			...(await this.getModels()),
-			...(await this.getValidators()),
-			...(await this.getEnums()),
-		};
-
-		return schemas;
-	}
-
-	private async getValidators() {
-		const validators = {};
-		let p6 = join(this.options.appPath, "validators");
-
-		if (typeof this.customPaths["#validators"] !== "undefined") {
-			// it's v6
-			p6 = p6.replaceAll("app/validators", this.customPaths["#validators"]);
-			p6 = p6.replaceAll("app\\validators", this.customPaths["#validators"]);
-		}
-
-		if (!existsSync(p6)) {
-			if (this.options.debug) {
-				console.log("Validators paths don't exist", p6);
-			}
-			return validators;
-		}
-
-		const files = await this.getFiles(p6, []);
-		if (this.options.debug) {
-			console.log("Found validator files", files);
-		}
-
-		try {
-			for (let file of files) {
-				if (/^[a-zA-Z]:/.test(file)) {
-					file = "file:///" + file;
-				}
-
-				const val = await import(file);
-				for (const [key, value] of Object.entries(val)) {
-					if (value.constructor.name.includes("VineValidator")) {
-						validators[key] = await this.validatorParser.validatorToObject(
-							value as VineValidator<any, any>,
-						);
-						validators[key].description = key + " (Validator)";
-					}
-				}
-			}
-		} catch (e) {
-			console.log(
-				"**You are probably using 'node ace serve --hmr', which is not supported yet. Use 'node ace serve --watch' instead.**",
-			);
-			console.error(e.message);
-		}
-
-		return validators;
-	}
-
-	private async getSerializers() {
-		const serializers = {};
-		let p6 = join(this.options.appPath, "serializers");
-
-		if (typeof this.customPaths["#serializers"] !== "undefined") {
-			// it's v6
-			p6 = p6.replaceAll("app/serializers", this.customPaths["#serializers"]);
-			p6 = p6.replaceAll("app\\serializers", this.customPaths["#serializers"]);
-		}
-
-		if (!existsSync(p6)) {
-			if (this.options.debug) {
-				console.log("Serializers paths don't exist", p6);
-			}
-			return serializers;
-		}
-
-		const files = await this.getFiles(p6, []);
-		if (this.options.debug) {
-			console.log("Found serializer files", files);
-		}
-
-		for (let file of files) {
-			if (/^[a-zA-Z]:/.test(file)) {
-				file = "file:///" + file;
-			}
-
-			const val = await import(file);
-
-			for (const [key, value] of Object.entries(val)) {
-				if (key.indexOf("Serializer") > -1) {
-					serializers[key] = value;
-				}
-			}
-		}
-
-		return serializers;
-	}
-
-	private async getModels() {
-		const models = {};
-		let p = join(this.options.appPath, "Models");
-		let p6 = join(this.options.appPath, "models");
-
-		if (typeof this.customPaths["#models"] !== "undefined") {
-			// it's v6
-			p6 = p6.replaceAll("app/models", this.customPaths["#models"]);
-			p6 = p6.replaceAll("app\\models", this.customPaths["#models"]);
-		}
-
-		if (!existsSync(p) && !existsSync(p6)) {
-			if (this.options.debug) {
-				console.log("Model paths don't exist", p, p6);
-			}
-			return models;
-		}
-		if (existsSync(p6)) {
-			p = p6;
-		}
-		const files = await this.getFiles(p, []);
-		if (this.options.debug) {
-			console.log("Found model files", files);
-		}
-		for (let file of files) {
-			file = file.replace(".js", "");
-			const data = await readFile(file, "utf8");
-			file = file.replace(".ts", "");
-			const split = file.split("/");
-			let name = split[split.length - 1].replace(".ts", "");
-			file = file.replace("app/", "/app/");
-			const parsed = this.modelParser.parseModelProperties(data);
-			if (parsed.name !== "") {
-				name = parsed.name;
-			}
-			let schema = {
-				type: "object",
-				required: parsed.required,
-				properties: parsed.props,
-				description: name + " (Model)",
-			};
-			models[name] = schema;
-		}
-		return models;
-	}
-
-	private async getInterfaces() {
-		let interfaces = {
-			...ExampleInterfaces.paginationInterface(),
-		};
-		let p = join(this.options.appPath, "Interfaces");
-		let p6 = join(this.options.appPath, "interfaces");
-
-		if (typeof this.customPaths["#interfaces"] !== "undefined") {
-			// it's v6
-			p6 = p6.replaceAll("app/interfaces", this.customPaths["#interfaces"]);
-			p6 = p6.replaceAll("app\\interfaces", this.customPaths["#interfaces"]);
-		}
-
-		if (!existsSync(p) && !existsSync(p6)) {
-			if (this.options.debug) {
-				console.log("Interface paths don't exist", p, p6);
-			}
-			return interfaces;
-		}
-		if (existsSync(p6)) {
-			p = p6;
-		}
-		const files = await this.getFiles(p, []);
-		if (this.options.debug) {
-			console.log("Found interfaces files", files);
-		}
-		for (let file of files) {
-			file = file.replace(".js", "");
-			const data = await readFile(file, "utf8");
-			file = file.replace(".ts", "");
-			interfaces = {
-				...interfaces,
-				...this.interfaceParser.parseInterfaces(data),
-			};
-		}
-
-		return interfaces;
-	}
-
-	private async getFiles(dir, files_) {
-		files_ = files_ || [];
-		var files = await readdir(dir);
-		for (let i in files) {
-			var name = dir + "/" + files[i];
-			if ((await stat(name)).isDirectory()) {
-				await this.getFiles(name, files_);
-			} else {
-				files_.push(name);
-			}
-		}
-		return files_;
-	}
-
-	private async getEnums() {
-		let enums = {};
-
-		const enumParser = new EnumParser();
-
-		let p = join(this.options.appPath, "Types");
-		let p6 = join(this.options.appPath, "types");
-
-		if (typeof this.customPaths["#types"] !== "undefined") {
-			// it's v6
-			p6 = p6.replaceAll("app/types", this.customPaths["#types"]);
-			p6 = p6.replaceAll("app\\types", this.customPaths["#types"]);
-		}
-
-		if (!existsSync(p) && !existsSync(p6)) {
-			if (this.options.debug) {
-				console.log("Enum paths don't exist", p, p6);
-			}
-			return enums;
-		}
-
-		if (existsSync(p6)) {
-			p = p6;
-		}
-
-		const files = await this.getFiles(p, []);
-		if (this.options.debug) {
-			console.log("Found enum files", files);
-		}
-
-		for (let file of files) {
-			file = file.replace(".js", "");
-			const data = await readFile(file, "utf8");
-			file = file.replace(".ts", "");
-			const split = file.split("/");
-			const name = split[split.length - 1].replace(".ts", "");
-			file = file.replace("app/", "/app/");
-
-			const parsedEnums = enumParser.parseEnums(data);
-			enums = {
-				...enums,
-				...parsedEnums,
-			};
-		}
-
-		return enums;
 	}
 }
 
