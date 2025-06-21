@@ -1,6 +1,6 @@
 {
   "name": "adonisjs-openapi",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Auto-Generate swagger docs for AdonisJS",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
