@@ -1,5 +1,4 @@
-import { VineValidator } from '@vinejs/vine';
-import _, { snakeCase } from 'lodash';
+import { snakeCase } from 'lodash';
 
 import { ExampleGenerator } from './example-generator';
 import { getBetweenBrackets, isJSONString } from './helpers';

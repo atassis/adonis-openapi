@@ -1,4 +1,3 @@
-import _ from 'lodash';
 import { SimpleMessagesProvider, VineValidator } from '@vinejs/vine';
 import { ExampleGenerator } from '../example-generator';
 

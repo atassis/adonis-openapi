@@ -219,6 +219,7 @@ async function getDataBasedOnAdonisVersion(
   }
   return { sourceFile, action, customAnnotations, operationId };
 }
+
 export function jsonToYaml(json: any) {
   return YAML.stringify(json);
 }
