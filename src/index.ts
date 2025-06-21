@@ -6,7 +6,7 @@ import HTTPStatusCode from 'http-status-code';
 import YAML from 'json-to-pretty-yaml';
 import _, { isEmpty, isUndefined } from 'lodash';
 
-import { serializeV6Handler, serializeV6Middleware } from './adonisjs-helpersrs';
+import { serializeV6Handler, serializeV6Middleware } from './adonisjs-helpers';
 import { ExampleGenerator, ExampleInterfaces } from './example-generator';
 import { formatOperationId, mergeParams } from './helpers';
 import { extractRouteInfos, parseModelProperties } from './parsers';
