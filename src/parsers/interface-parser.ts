@@ -1,4 +1,4 @@
-import { ExampleGenerator } from '../example';
+import { ExampleGenerator } from '../example-generator';
 
 const exampleGenerator = new ExampleGenerator({});
 

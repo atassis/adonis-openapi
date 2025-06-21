@@ -1,3 +1,5 @@
+import parseImports from 'parse-imports';
+
 export function serializeV6Middleware(mw: any): string[] {
   return [...mw.all()].reduce<string[]>((result, one) => {
     if (typeof one === 'function') {
@@ -36,7 +38,6 @@ export async function serializeV6Handler(handler: any): Promise<any> {
 export async function parseBindingReference(
   binding: string | [any | any, any],
 ): Promise<{ moduleNameOrPath: string; method: string }> {
-  const parseImports = (await import('parse-imports')).default;
   /**
    * The binding reference is a magic string. It might not have method
    * name attached to it. Therefore we split the string and attempt

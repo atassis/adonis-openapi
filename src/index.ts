@@ -1,5 +1,3 @@
-// @ts-expect-error moduleResolution:nodenext issue 54523
-
 import { existsSync } from 'node:fs';
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,18 +6,15 @@ import HTTPStatusCode from 'http-status-code';
 import YAML from 'json-to-pretty-yaml';
 import _, { isEmpty, isUndefined } from 'lodash';
 
-import { serializeV6Handler, serializeV6Middleware } from './adonishelpers';
-import { ExampleGenerator, ExampleInterfaces } from './example';
+import { serializeV6Handler, serializeV6Middleware } from './adonis-helpers';
+import { ExampleGenerator, ExampleInterfaces } from './example-generator';
 import { formatOperationId, mergeParams } from './helpers';
-import {
-  CommentParser,
-  EnumParser,
-  extractRouteInfos,
-  parseModelProperties,
-  ValidatorParser,
-} from './parsers';
+import { extractRouteInfos, parseModelProperties } from './parsers';
+import { getAnnotations } from './parsers/comment-parser';
+import { parseEnums } from './parsers/enum-parser';
 import { parseInterfaces } from './parsers/interface-parser';
-import { scalarCustomCss } from './scalarCustomCss';
+import { validatorToObject } from './parsers/validator-parser';
+import { scalarCustomCss } from './scalar-custom-css';
 import type { AdonisOpenapiOptions, AdonisRoute, AdonisRoutes, v6Handler } from './types';
 
 export type CustomPaths = Record<string, string>;
@@ -196,10 +191,13 @@ async function getDataBasedOnAdonisVersion(
   if (sourceFile !== '' && action !== '') {
     sourceFile = `${sourceFile.replace('App/', 'app/')}.ts`;
     sourceFile = sourceFile.replace('.js', '');
-    const commentParser = new CommentParser(options);
-    commentParser.exampleGenerator = new ExampleGenerator(schemas);
 
-    customAnnotations = await commentParser.getAnnotations(sourceFile, action);
+    customAnnotations = await getAnnotations(
+      new ExampleGenerator(schemas),
+      options,
+      sourceFile,
+      action,
+    );
   }
   if (
     typeof customAnnotations !== 'undefined' &&
@@ -236,9 +234,9 @@ async function readLocalFile(rootPath: string, type = 'yml') {
 }
 
 async function getFiles(dir: string, files_: string[] = []) {
-  var files = await readdir(dir);
+  const files = await readdir(dir);
   for (const i in files) {
-    var name = `${dir}/${files[i]}`;
+    const name = `${dir}/${files[i]}`;
     if ((await stat(name)).isDirectory()) {
       await getFiles(name, files_);
     } else {
@@ -403,9 +401,7 @@ async function getValidators(customPaths: CustomPaths, options: AdonisOpenapiOpt
       const val = await import(file);
       for (const [key, value] of Object.entries(val)) {
         if (value.constructor.name.includes('VineValidator')) {
-          validators[key] = await new ValidatorParser().validatorToObject(
-            value as VineValidator<any, any>,
-          );
+          validators[key] = await validatorToObject(value as VineValidator<any, any>);
           validators[key].description = `${key} (Validator)`;
         }
       }
@@ -422,8 +418,6 @@ async function getValidators(customPaths: CustomPaths, options: AdonisOpenapiOpt
 
 async function getEnums(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
   let enums = {};
-
-  const enumParser = new EnumParser();
 
   let p = join(options.appPath, 'Types');
   let p6 = join(options.appPath, 'types');
@@ -458,7 +452,7 @@ async function getEnums(customPaths: CustomPaths, options: AdonisOpenapiOptions)
     const _name = split[split.length - 1].replace('.ts', '');
     file = file.replace('app/', '/app/');
 
-    const parsedEnums = enumParser.parseEnums(data);
+    const parsedEnums = parseEnums(data);
     enums = {
       ...enums,
       ...parsedEnums,
@@ -551,7 +545,6 @@ export class AdonisOpenapi {
       console.log('Found Schemas', Object.keys(this.schemas));
       console.log('Using custom paths', this.customPaths);
     }
-    new CommentParser(this.options).exampleGenerator = new ExampleGenerator(this.schemas);
 
     const docs = {
       openapi: '3.0.0',
@@ -786,7 +779,7 @@ export class AdonisOpenapi {
         }
 
         const _sf = sourceFile.split('/').at(-1).replace('.ts', '');
-        const m = {
+        const m: any = {
           summary: `${summary}${action !== '' ? ` (${action})` : 'route'}`,
           description: `${description}\n\n _${sourceFile}_ - **${action}**`,
           operationId: operationId,
