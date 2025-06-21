@@ -605,11 +605,10 @@ export class AdonisOpenapi {
     const securities = {
       auth: { [sscheme]: ['access'] },
       'auth:api': { [sscheme]: ['access'] },
-      ...this.options.authMiddlewares
-        ?.map((am) => ({
-          [am]: { [sscheme]: ['access'] },
-        }))
-        .reduce((acc, val) => ({ ...acc, ...val }), {}),
+      ...this.options.authMiddlewares?.reduce((acc, am) => {
+        acc[am] = { [sscheme]: ['access'] };
+        return acc;
+      }, {}),
     };
 
     const globalTags = [];

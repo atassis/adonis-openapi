@@ -58,12 +58,13 @@ const jsonToObj = (exampleGenerator: ExampleGenerator, json: Record<string, any>
   properties: Object.keys(json).reduce((acc, key) => {
     const t = typeof json[key];
     let value = json[key];
+    const originalValue = json[key];
     if (t === 'object') {
       value = jsonToObj(exampleGenerator, json[key]);
     }
     if (t === 'string' && value.includes('<') && value.includes('>')) {
-      value = exampleGenerator.parseRef(value);
-      if (value.includes('[]')) {
+      value = (new ExampleGenerator({})).parseRef(value);
+      if (originalValue.includes('[]')) {
         let ref = '';
         if (_.has(value, 'content.application/json.schema.$ref')) {
           ref = value.content['application/json'].schema.$ref;
@@ -232,8 +233,8 @@ const parseRequestFormDataBody = (exampleGenerator: ExampleGenerator, rawLine: s
 };
 
 const parseAnnotations = (
-  options: AdonisOpenapiOptions,
   exampleGenerator: ExampleGenerator,
+  options: AdonisOpenapiOptions,
   lines: string[],
 ) => {
   let summary = '';
@@ -426,7 +427,7 @@ export async function getAnnotations(
       if (lines[0].trim() !== `@${action}`) return;
       lines = lines.filter((l) => l !== '');
 
-      annotations[action] = parseAnnotations(options, exampleGenerator, lines);
+      annotations[action] = parseAnnotations(exampleGenerator, options, lines);
     });
   }
   return annotations;
