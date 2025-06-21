@@ -63,7 +63,7 @@ const jsonToObj = (exampleGenerator: ExampleGenerator, json: Record<string, any>
       value = jsonToObj(exampleGenerator, json[key]);
     }
     if (t === 'string' && value.includes('<') && value.includes('>')) {
-      value = (new ExampleGenerator({})).parseRef(value);
+      value = new ExampleGenerator({}).parseRef(value);
       if (originalValue.includes('[]')) {
         let ref = '';
         if (_.has(value, 'content.application/json.schema.$ref')) {
