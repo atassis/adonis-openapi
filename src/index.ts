@@ -4,18 +4,21 @@ import { join } from 'node:path';
 import { VineValidator } from '@vinejs/vine';
 import HTTPStatusCode from 'http-status-code';
 import YAML from 'json-to-pretty-yaml';
-import _, { isEmpty, isUndefined } from 'lodash';
+import { isEmpty, isUndefined, uniq } from 'lodash';
 
 import { serializeV6Handler, serializeV6Middleware } from './adonisjs-helpers';
-import { ExampleGenerator, ExampleInterfaces } from './example-generator';
+import { ExampleGenerator, paginationInterface } from './example-generator';
 import { formatOperationId, mergeParams } from './helpers';
-import { extractRouteInfos, parseModelProperties } from './parsers';
 import { getAnnotations } from './parsers/comment-parser';
 import { parseEnums } from './parsers/enum-parser';
 import { parseInterfaces } from './parsers/interface-parser';
+import { parseModelProperties } from './parsers/model-parser';
+import { extractRouteInfos } from './parsers/route-parser';
 import { validatorToObject } from './parsers/validator-parser';
 import { scalarCustomCss } from './scalar-custom-css';
 import type { AdonisOpenapiOptions, AdonisRoute, AdonisRoutes, v6Handler } from './types';
+
+export type { AdonisOpenapiOptions };
 
 export type CustomPaths = Record<string, string>;
 
@@ -209,7 +212,7 @@ async function getDataBasedOnAdonisVersion(
   if (options.debug) {
     if (sourceFile !== '') {
       console.log(
-        typeof customAnnotations !== 'undefined' && !_.isEmpty(customAnnotations)
+        typeof customAnnotations !== 'undefined' && !isEmpty(customAnnotations)
           ? `\x1b[32m✓ FOUND for ${action}\x1b[0m`
           : `\x1b[33m✗ MISSING for ${action}\x1b[0m`,
 
@@ -249,7 +252,7 @@ async function getFiles(dir: string, files_: string[] = []) {
 
 async function getInterfaces(customPaths: CustomPaths, options: AdonisOpenapiOptions) {
   let interfaces = {
-    ...ExampleInterfaces.paginationInterface(),
+    ...paginationInterface(),
   };
   let p = join(options.appPath, 'Interfaces');
   let p6 = join(options.appPath, 'interfaces');
@@ -515,7 +518,7 @@ async function generate(adonisRoutes: AdonisRoutes, options: AdonisOpenapiOption
   }
 
   const docs = {
-    openapi: '3.0.0',
+    openapi: '3.1.0',
     info: options.info || {
       title: options.title,
       version: options.version,
@@ -773,7 +776,7 @@ async function generate(adonisRoutes: AdonisRoutes, options: AdonisOpenapiOption
   }
 
   // filter unused tags
-  const usedTags = _.uniq(
+  const usedTags = uniq(
     Object.entries(paths).flatMap(([_p, val]) => Object.entries(val)[0][1].tags),
   );
 

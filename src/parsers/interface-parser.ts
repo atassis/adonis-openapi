@@ -1,6 +1,4 @@
-import { ExampleGenerator } from '../example-generator';
-
-const exampleGenerator = new ExampleGenerator({});
+import { exampleByField, exampleByType } from '../example-generator';
 
 function objToExample(obj) {
   const example = {};
@@ -8,9 +6,9 @@ function objToExample(obj) {
     if (typeof value === 'object') {
       example[key] = objToExample(value);
     } else {
-      example[key] = exampleGenerator.exampleByType(value as string);
+      example[key] = exampleByType(value as string);
       if (example[key] === null) {
-        example[key] = exampleGenerator.exampleByField(key);
+        example[key] = exampleByField(key);
       }
     }
   });
@@ -72,7 +70,7 @@ function parseType(type: string | any, field: string) {
       if (typeof type === 'string') {
         prop.type = type.toLowerCase();
       }
-      prop.example = exampleGenerator.exampleByType(type) || exampleGenerator.exampleByField(field);
+      prop.example = exampleByType(type) || exampleByField(field);
     }
   }
 

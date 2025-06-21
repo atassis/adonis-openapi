@@ -23,7 +23,6 @@
   "license": "MIT",
   "dependencies": {
     "@vinejs/vine": "^2.1.0",
-    "change-case": "^4.1.2",
     "extract-comments": "^1.1.0",
     "http-status-code": "^2.1.0",
     "json-to-pretty-yaml": "^1.2.2",
@@ -32,7 +31,7 @@
     "typescript": "^5.8.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.0.0",
+    "@biomejs/biome": "^2.0.4",
     "@types/lodash": "^4.14.202",
     "@types/node": "^20.10.4",
     "husky": "^9.1.7",

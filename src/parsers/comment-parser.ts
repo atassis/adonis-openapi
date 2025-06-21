@@ -1,7 +1,7 @@
 import extract from 'extract-comments';
 import HTTPStatusCode from 'http-status-code';
 import { AdonisOpenapiOptions } from '../types';
-import { ExampleGenerator } from '../example-generator';
+import { ExampleGenerator, jsonToRef } from '../example-generator';
 import { getBetweenBrackets, isJSONString } from '../helpers';
 import { readFile } from 'node:fs/promises';
 
@@ -45,7 +45,7 @@ const parseBody = (exampleGenerator: ExampleGenerator, rawLine: string, type: st
             ...(Array.isArray(json) ? { items: arrayItems(exampleGenerator, json) } : o),
           },
 
-          example: exampleGenerator.jsonToRef(json),
+          example: jsonToRef(json),
         },
       },
     };
@@ -94,7 +94,7 @@ const parseResponseBody = (exampleGenerator: ExampleGenerator, responseLine: str
   const line = responseLine.replace('@responseBody ', '');
   const [status, res, desc] = line.split(' - ');
   if (typeof status === 'undefined') return;
-  responses[status] = parseBody(exampleGenerator, res, 'responseBody');
+  responses[status] = parseBody(exampleGenerator, res || '', 'responseBody');
   responses[status].description = desc;
   return responses;
 };

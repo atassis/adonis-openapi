@@ -2,6 +2,110 @@ import { snakeCase } from 'lodash';
 
 import { getBetweenBrackets } from './helpers';
 
+export function exampleByField(field: string, _type = '') {
+  const ex = {
+    datetime: '2021-03-23T16:13:08.489+01:00',
+    DateTime: '2021-03-23T16:13:08.489+01:00',
+    date: '2021-03-23',
+    title: 'Lorem Ipsum',
+    year: 2023,
+    description: 'Lorem ipsum dolor sit amet',
+    name: 'John Doe',
+    full_name: 'John Doe',
+    first_name: 'John',
+    last_name: 'Doe',
+    email: 'johndoe@example.com',
+    address: '1028 Farland Street',
+    street: '1028 Farland Street',
+    country: 'United States of America',
+    country_code: 'US',
+    zip: 60617,
+    city: 'Chicago',
+    password: 'S3cur3P4s5word!',
+    password_confirmation: 'S3cur3P4s5word!',
+    lat: 41.705,
+    long: -87.475,
+    price: 10.5,
+    avatar: 'https://example.com/avatar.png',
+    url: 'https://example.com',
+  };
+  if (typeof ex[field] !== 'undefined') {
+    return ex[field];
+  }
+  if (typeof ex[snakeCase(field)] !== 'undefined') {
+    return ex[snakeCase(field)];
+  }
+  return null;
+}
+
+export function jsonToRef(json) {
+  const jsonObjectIsArray = Array.isArray(json);
+  const out = {};
+  const outArr = [];
+  for (let [k, v] of Object.entries(json)) {
+    if (typeof v === 'object') {
+      if (!Array.isArray(v)) {
+        v = jsonToRef(v);
+      }
+    }
+    if (typeof v === 'string') {
+      v = this.parseRef(v, true);
+    }
+
+    if (jsonObjectIsArray) {
+      outArr.push(v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return outArr.length > 0 ? outArr.flat() : out;
+}
+
+export function exampleByType(type) {
+  switch (type) {
+    case 'string':
+      return exampleByField('title');
+    case 'number':
+      return Math.floor(Math.random() * 1000);
+    case 'integer':
+      return Math.floor(Math.random() * 1000);
+    case 'boolean':
+      return true;
+    case 'DateTime':
+      return exampleByField('datetime');
+    case 'datetime':
+      return exampleByField('datetime');
+    case 'date':
+      return exampleByField('date');
+    case 'object':
+      return {};
+    default:
+      return null;
+  }
+}
+
+export function exampleByValidatorRule(rule: string) {
+  switch (rule) {
+    case 'email':
+      return 'user@example.com';
+    default:
+      return 'Some string';
+  }
+}
+
+function getPaginatedData(line: string): { dataName: string; metaName: string } {
+  const match = line.match(/<.*>\.paginated\((.*)\)/);
+  if (!match) {
+    return { dataName: 'data', metaName: 'meta' };
+  }
+
+  const params = match[1].split(',').map((s) => s.trim());
+  const dataName = params[0] || 'data';
+  const metaName = params[1] || 'meta';
+
+  return { dataName, metaName };
+}
+
 export class ExampleGenerator {
   public schemas = {};
   constructor(schemas: any) {
@@ -15,7 +119,7 @@ export class ExampleGenerator {
     for (let [k, v] of Object.entries(json)) {
       if (typeof v === 'object') {
         if (!Array.isArray(v)) {
-          v = this.jsonToRef(v);
+          v = jsonToRef(v);
         }
       }
       if (typeof v === 'string') {
@@ -98,7 +202,7 @@ export class ExampleGenerator {
       console.error('Error', cleanedRef);
     }
 
-    const { dataName, metaName } = this.getPaginatedData(line);
+    const { dataName, metaName } = getPaginatedData(line);
 
     const paginatedEx = {
       [dataName]: [ex],
@@ -148,15 +252,6 @@ export class ExampleGenerator {
         },
       },
     };
-  }
-
-  exampleByValidatorRule(rule: string) {
-    switch (rule) {
-      case 'email':
-        return 'user@example.com';
-      default:
-        return 'Some string';
-    }
   }
 
   getSchemaExampleBasedOnAnnotation(
@@ -294,110 +389,33 @@ export class ExampleGenerator {
 
     return props;
   }
-
-  exampleByType(type) {
-    switch (type) {
-      case 'string':
-        return this.exampleByField('title');
-      case 'number':
-        return Math.floor(Math.random() * 1000);
-      case 'integer':
-        return Math.floor(Math.random() * 1000);
-      case 'boolean':
-        return true;
-      case 'DateTime':
-        return this.exampleByField('datetime');
-      case 'datetime':
-        return this.exampleByField('datetime');
-      case 'date':
-        return this.exampleByField('date');
-      case 'object':
-        return {};
-      default:
-        return null;
-    }
-  }
-
-  exampleByField(field, _type = '') {
-    const ex = {
-      datetime: '2021-03-23T16:13:08.489+01:00',
-      DateTime: '2021-03-23T16:13:08.489+01:00',
-      date: '2021-03-23',
-      title: 'Lorem Ipsum',
-      year: 2023,
-      description: 'Lorem ipsum dolor sit amet',
-      name: 'John Doe',
-      full_name: 'John Doe',
-      first_name: 'John',
-      last_name: 'Doe',
-      email: 'johndoe@example.com',
-      address: '1028 Farland Street',
-      street: '1028 Farland Street',
-      country: 'United States of America',
-      country_code: 'US',
-      zip: 60617,
-      city: 'Chicago',
-      password: 'S3cur3P4s5word!',
-      password_confirmation: 'S3cur3P4s5word!',
-      lat: 41.705,
-      long: -87.475,
-      price: 10.5,
-      avatar: 'https://example.com/avatar.png',
-      url: 'https://example.com',
-    };
-    if (typeof ex[field] !== 'undefined') {
-      return ex[field];
-    }
-    if (typeof ex[snakeCase(field)] !== 'undefined') {
-      return ex[snakeCase(field)];
-    }
-    return null;
-  }
-
-  getPaginatedData(line: string): { dataName: string; metaName: string } {
-    const match = line.match(/<.*>\.paginated\((.*)\)/);
-    if (!match) {
-      return { dataName: 'data', metaName: 'meta' };
-    }
-
-    const params = match[1].split(',').map((s) => s.trim());
-    const dataName = params[0] || 'data';
-    const metaName = params[1] || 'meta';
-
-    return { dataName, metaName };
-  }
 }
-
-export abstract class ExampleInterfaces {
-  public static paginationInterface() {
-    return {
-      PaginationMeta: {
-        type: 'object',
-        properties: {
-          total: { type: 'number', example: 100, nullable: false },
-          page: { type: 'number', example: 2, nullable: false },
-          perPage: { type: 'number', example: 10, nullable: false },
-          currentPage: { type: 'number', example: 3, nullable: false },
-          lastPage: { type: 'number', example: 10, nullable: false },
-          firstPage: { type: 'number', example: 1, nullable: false },
-          lastPageUrl: {
-            type: 'string',
-            example: '/?page=10',
-            nullable: false,
-          },
-          firstPageUrl: {
-            type: 'string',
-            example: '/?page=1',
-            nullable: false,
-          },
-          nextPageUrl: { type: 'string', example: '/?page=6', nullable: false },
-          previousPageUrl: {
-            type: 'string',
-            example: '/?page=5',
-            nullable: false,
-          },
-        },
+export const paginationInterface = () => ({
+  PaginationMeta: {
+    type: 'object',
+    properties: {
+      total: { type: 'number', example: 100, nullable: false },
+      page: { type: 'number', example: 2, nullable: false },
+      perPage: { type: 'number', example: 10, nullable: false },
+      currentPage: { type: 'number', example: 3, nullable: false },
+      lastPage: { type: 'number', example: 10, nullable: false },
+      firstPage: { type: 'number', example: 1, nullable: false },
+      lastPageUrl: {
+        type: 'string',
+        example: '/?page=10',
+        nullable: false,
       },
-    };
-  }
-}
+      firstPageUrl: {
+        type: 'string',
+        example: '/?page=1',
+        nullable: false,
+      },
+      nextPageUrl: { type: 'string', example: '/?page=6', nullable: false },
+      previousPageUrl: {
+        type: 'string',
+        example: '/?page=5',
+        nullable: false,
+      },
+    },
+  },
+});

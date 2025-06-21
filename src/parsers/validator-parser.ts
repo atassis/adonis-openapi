@@ -1,7 +1,6 @@
 import { SimpleMessagesProvider, VineValidator } from '@vinejs/vine';
-import { ExampleGenerator } from '../example-generator';
-
-const exampleGenerator = new ExampleGenerator({});
+import { exampleByType, exampleByValidatorRule } from '../example-generator';
+import { get, set, unset } from 'lodash';
 
 function objToTest(obj) {
   const res = {};
@@ -63,15 +62,13 @@ function parseSchema(json, refs) {
                     }
                   : {
                       type: 'number',
-                      example: meta.minimum
-                        ? meta.minimum
-                        : exampleGenerator.exampleByType('number'),
+                      example: meta.minimum ? meta.minimum : exampleByType('number'),
                       ...meta,
                     },
             }
           : {
               type: 'number',
-              example: meta.minimum ? meta.minimum : exampleGenerator.exampleByType('number'),
+              example: meta.minimum ? meta.minimum : exampleByType('number'),
               ...meta,
             };
     if (!p.isOptional) obj[p.fieldName].required = true;
@@ -107,39 +104,39 @@ async function parsePropsAndMeta(obj, testObj, validator: VineValidator<any, any
       objField = objField.replaceAll('.0', '.items');
     }
     if (err === 'TYPE') {
-      _.set(obj.properties, objField, {
-        ..._.get(obj.properties, objField),
+      set(obj.properties, objField, {
+        ...get(obj.properties, objField),
         type: m.rule,
-        example: exampleGenerator.exampleByType(m.rule),
+        example: exampleByType(m.rule),
       });
       if (m.rule === 'string') {
-        if (_.get(obj.properties, objField).minimum) {
-          _.set(obj.properties, objField, {
-            ..._.get(obj.properties, objField),
-            minLength: _.get(obj.properties, objField).minimum,
+        if (get(obj.properties, objField).minimum) {
+          set(obj.properties, objField, {
+            ...get(obj.properties, objField),
+            minLength: get(obj.properties, objField).minimum,
           });
-          _.unset(obj.properties, `${objField}.minimum`);
+          unset(obj.properties, `${objField}.minimum`);
         }
-        if (_.get(obj.properties, objField).maximum) {
-          _.set(obj.properties, objField, {
-            ..._.get(obj.properties, objField),
-            maxLength: _.get(obj.properties, objField).maximum,
+        if (get(obj.properties, objField).maximum) {
+          set(obj.properties, objField, {
+            ...get(obj.properties, objField),
+            maxLength: get(obj.properties, objField).maximum,
           });
-          _.unset(obj.properties, `${objField}.maximum`);
+          unset(obj.properties, `${objField}.maximum`);
         }
       }
 
-      _.set(testObj, m.field, exampleGenerator.exampleByType(m.rule));
+      set(testObj, m.field, exampleByType(m.rule));
     }
 
     if (err === 'FORMAT') {
-      _.set(obj.properties, objField, {
-        ..._.get(obj.properties, objField),
+      set(obj.properties, objField, {
+        ...get(obj.properties, objField),
         format: m.rule,
         type: 'string',
-        example: exampleGenerator.exampleByValidatorRule(m.rule),
+        example: exampleByValidatorRule(m.rule),
       });
-      _.set(testObj, m.field, exampleGenerator.exampleByValidatorRule(m.rule));
+      set(testObj, m.field, exampleByValidatorRule(m.rule));
     }
   }
 
