@@ -224,7 +224,7 @@ export function jsonToYaml(json: any) {
   return YAML.stringify(json);
 }
 
-async function readLocalFile(rootPath: string, type = 'yml') {
+async function readLocalFile(rootPath: string, type = 'yaml') {
   const filePath = `${rootPath}openapi.${type}`;
   const data = await readFile(filePath, 'utf-8');
   if (!data) {
@@ -800,11 +800,11 @@ export async function generateOpenapiJson(routes: any, options: AdonisOpenapiOpt
 export async function exportOpenapiFileSpec(routes: any, options: AdonisOpenapiOptions) {
   const json = await generate(routes, options);
   const contents = jsonToYaml(json);
-  const filePathYml = `${options.path}openapi.yml`;
+  const filePathYaml = `${options.path}openapi.yaml`;
   const filePathJson = `${options.path}openapi.json`;
   const outputFileExtensions = options.outputFileExtensions || 'both';
-  if (outputFileExtensions === 'both' || outputFileExtensions === 'yml') {
-    await writeFile(filePathYml, contents);
+  if (outputFileExtensions === 'both' || outputFileExtensions === 'yaml') {
+    await writeFile(filePathYaml, contents);
   }
   if (outputFileExtensions === 'both' || outputFileExtensions === 'json') {
     await writeFile(filePathJson, JSON.stringify(json, null, 2));
@@ -815,7 +815,7 @@ export async function exportOpenapiFileSpec(routes: any, options: AdonisOpenapiO
  * Generate OpenAPI YAML file
  * Reads file from disk if in production mode
  */
-export async function generateOpenapiYml(routes: any, options: AdonisOpenapiOptions) {
+export async function generateOpenapiYaml(routes: any, options: AdonisOpenapiOptions) {
   if (process.env.NODE_ENV === (options.productionEnv || 'production')) {
     return readLocalFile(options.path);
   }

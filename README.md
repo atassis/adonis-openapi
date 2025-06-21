@@ -577,7 +577,7 @@ export default await Env.create(
 ```bash
 node ace docs:generate
 node ace build --production
-cp swagger.yml build/
+cp openapi.yaml build/
 ```
 
 ## Known Issues

@@ -20,7 +20,7 @@ export interface AdonisOpenapiOptions {
   productionEnv?: string;
   authMiddlewares?: string[];
   defaultSecurityScheme?: string;
-  outputFileExtensions?: 'both' | 'json' | 'yml';
+  outputFileExtensions?: 'both' | 'json' | 'yaml';
 }
 
 export interface common {
