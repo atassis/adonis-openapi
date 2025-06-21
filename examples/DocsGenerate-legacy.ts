@@ -1,5 +1,5 @@
 import { BaseCommand } from '@adonisjs/core/build/standalone';
-import AdonisOpenapi from 'adonis-openapi';
+import AdonisOpenapi from 'adonisjs-openapi';
 
 import swagger from '../config/swagger';
 

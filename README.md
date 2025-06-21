@@ -1,19 +1,19 @@
 <h1 align="center">
-Adonis Openapi <br />
+Adonis.JS Openapi <br />
 <img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Swagger-logo.png" height="50" />
 </h1>
 
-[![Version](https://img.shields.io/github/tag/ad-on-is/adonis-openapi.svg?style=flat?branch=main)]()
-[![GitHub stars](https://img.shields.io/github/stars/ad-on-is/adonis-openapi.svg?style=social&label=Star)]()
-[![GitHub watchers](https://img.shields.io/github/watchers/ad-on-is/adonis-openapi.svg?style=social&label=Watch)]()
-[![GitHub forks](https://img.shields.io/github/forks/ad-on-is/adonis-openapi.svg?style=social&label=Fork)]()
+[![Version](https://img.shields.io/github/tag/atassis/adonisjs-openapi.svg?style=flat?branch=main)]()
+[![GitHub stars](https://img.shields.io/github/stars/atassis/adonisjs-openapi.svg?style=social&label=Star)]()
+[![GitHub watchers](https://img.shields.io/github/watchers/atassis/adonisjs-openapi.svg?style=social&label=Watch)]()
+[![GitHub forks](https://img.shields.io/github/forks/atassis/adonisjs-openapi.svg?style=social&label=Fork)]()
 
 ### Auto-Generate swagger docs for AdonisJS
 
 ## 💻️ Install
 
 ```bash
-pnpm i adonis-openapi #using pnpm
+pnpm i adonisjs-openapi #using pnpm
 ```
 
 ---
@@ -76,7 +76,7 @@ In your `routes.ts`
 ## 6️⃣ for AdonisJS v6
 
 ```js
-import AdonisOpenapi from "adonis-openapi";
+import AdonisOpenapi from "adonisjs-openapi";
 import swagger from "#config/swagger";
 // returns swagger in YAML
 router.get("/swagger", async () => {
@@ -94,7 +94,7 @@ router.get("/docs", async () => {
 ## 5️⃣ for AdonisJS v5
 
 ```js
-import AdonisOpenapi from "adonis-openapi";
+import AdonisOpenapi from "adonisjs-openapi";
 import swagger from "Config/swagger";
 // returns swagger in YAML
 Route.get("/swagger", async () => {
@@ -543,7 +543,7 @@ To make it work in production environments, additional steps are required
 
   - This should create a new file in `commands/DocsGenerate.ts`
 
-- Use the provided [`DocsGenerate.ts.examle`](https://github.com/atassis/adonis-openapi/blob/main/DocsGenerate.ts.example)/[`DocsGeneratev6.ts.example`](https://github.com/atassis/adonis-openapi/blob/main/DocsGeneratev6.ts.example) and put its contents into your newly created `DocsGenerate.ts`
+- Use the provided [`DocsGenerate.ts.examle`](https://github.com/atassis/adonisjs-openapi/blob/main/DocsGenerate.ts.example)/[`DocsGeneratev6.ts.example`](https://github.com/atassis/adonisjs-openapi/blob/main/DocsGeneratev6.ts.example) and put its contents into your newly created `DocsGenerate.ts`
 
 - Modify `/start/env.ts` as follows
 

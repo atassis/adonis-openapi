@@ -1,5 +1,5 @@
 {
-  "name": "adonis-openapi",
+  "name": "adonisjs-openapi",
   "version": "0.0.13",
   "description": "Auto-Generate swagger docs for AdonisJS",
   "main": "dist/index.js",
@@ -18,7 +18,7 @@
   "author": "Taimuraz Kaitmazov <atassikay38@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/atassis/adonis-openapi.git"
+    "url": "git+https://github.com/atassis/adonisjs-openapi.git"
   },
   "license": "MIT",
   "dependencies": {

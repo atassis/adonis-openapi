@@ -29,7 +29,7 @@ export interface common {
 }
 
 /**
- * Adonis routes
+ * Adonis.JS routes
  */
 export interface AdonisRouteMeta {
   resolvedHandler: {

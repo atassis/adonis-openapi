@@ -1,6 +1,6 @@
 import { BaseCommand } from '@adonisjs/core/ace';
 import { CommandOptions } from '@adonisjs/core/types/ace';
-import AdonisOpenapi from 'adonis-openapi';
+import AdonisOpenapi from 'adonisjs-openapi';
 
 import swagger from '#config/swagger';
 
