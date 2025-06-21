@@ -1,6 +1,7 @@
 import { SimpleMessagesProvider, VineValidator } from '@vinejs/vine';
-import { exampleByType, exampleByValidatorRule } from '../example-generator';
 import { get, set, unset } from 'lodash';
+
+import { exampleByType, exampleByValidatorRule } from '../example-generator';
 
 function objToTest(obj) {
   const res = {};

@@ -1,9 +1,10 @@
+import { readFile } from 'node:fs/promises';
 import extract from 'extract-comments';
 import HTTPStatusCode from 'http-status-code';
-import { AdonisOpenapiOptions } from '../types';
+
 import { jsonToRef, parseRef, Schemas } from '../example-generator';
 import { getBetweenBrackets, isJSONString } from '../helpers';
-import { readFile } from 'node:fs/promises';
+import { AdonisOpenapiOptions } from '../types';
 
 const arrayItems = (schemas: Schemas, json) => {
   const oneOf = [];
@@ -12,7 +13,7 @@ const arrayItems = (schemas: Schemas, json) => {
 
   if (t === 'string') {
     json.forEach((j) => {
-      const value = parseRef(schemas,j);
+      const value = parseRef(schemas, j);
 
       if (_.has(value, 'content.application/json.schema.$ref')) {
         oneOf.push({
@@ -232,11 +233,7 @@ const parseRequestFormDataBody = (schemas: Schemas, rawLine: string) => {
   };
 };
 
-const parseAnnotations = (
-  schemas: Schemas,
-  options: AdonisOpenapiOptions,
-  lines: string[],
-) => {
+const parseAnnotations = (schemas: Schemas, options: AdonisOpenapiOptions, lines: string[]) => {
   let summary = '';
   let tag = '';
   let description = '';

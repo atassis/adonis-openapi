@@ -195,12 +195,7 @@ async function getDataBasedOnAdonisVersion(
     sourceFile = `${sourceFile.replace('App/', 'app/')}.ts`;
     sourceFile = sourceFile.replace('.js', '');
 
-    customAnnotations = await getAnnotations(
-      schemas,
-      options,
-      sourceFile,
-      action,
-    );
+    customAnnotations = await getAnnotations(schemas, options, sourceFile, action);
   }
   if (
     typeof customAnnotations !== 'undefined' &&

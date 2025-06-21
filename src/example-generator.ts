@@ -132,8 +132,7 @@ export function getSchemaExampleBasedOnAnnotation(
     if (exclude.includes(key)) continue;
     if (exclude.includes(`${parent}.${key}`)) continue;
 
-    if (key === 'password' && !include.includes('password') && !only.includes('password'))
-      continue;
+    if (key === 'password' && !include.includes('password') && !only.includes('password')) continue;
     if (
       key === 'password_confirmation' &&
       !include.includes('password_confirmation') &&

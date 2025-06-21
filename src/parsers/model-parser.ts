@@ -1,4 +1,5 @@
 import { snakeCase } from 'lodash';
+
 import { exampleByField, exampleByType } from '../example-generator';
 import { getBetweenBrackets, isJSONString } from '../helpers';
 import { standardTypes } from '../types';
