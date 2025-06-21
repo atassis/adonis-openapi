@@ -1,18 +1,18 @@
 import extract from 'extract-comments';
 import HTTPStatusCode from 'http-status-code';
 import { AdonisOpenapiOptions } from '../types';
-import { ExampleGenerator, jsonToRef } from '../example-generator';
+import { jsonToRef, parseRef, Schemas } from '../example-generator';
 import { getBetweenBrackets, isJSONString } from '../helpers';
 import { readFile } from 'node:fs/promises';
 
-const arrayItems = (exampleGenerator: ExampleGenerator, json) => {
+const arrayItems = (schemas: Schemas, json) => {
   const oneOf = [];
 
   const t = typeof json[0];
 
   if (t === 'string') {
     json.forEach((j) => {
-      const value = exampleGenerator.parseRef(j);
+      const value = parseRef(schemas,j);
 
       if (_.has(value, 'content.application/json.schema.$ref')) {
         oneOf.push({
@@ -28,7 +28,7 @@ const arrayItems = (exampleGenerator: ExampleGenerator, json) => {
   return { type: typeof json[0] };
 };
 
-const parseBody = (exampleGenerator: ExampleGenerator, rawLine: string, type: string) => {
+const parseBody = (schemas: Schemas, rawLine: string, type: string) => {
   const line = rawLine.replace(`@${type} `, '');
 
   const isJson = isJSONString(line);
@@ -36,34 +36,34 @@ const parseBody = (exampleGenerator: ExampleGenerator, rawLine: string, type: st
   if (isJson) {
     // No need to try/catch this JSON.parse as we already did that in the isJSONString function
     const json = JSON.parse(line);
-    const o = jsonToObj(exampleGenerator, json);
+    const o = jsonToObj(schemas, json);
     return {
       content: {
         'application/json': {
           schema: {
             type: Array.isArray(json) ? 'array' : 'object',
-            ...(Array.isArray(json) ? { items: arrayItems(exampleGenerator, json) } : o),
+            ...(Array.isArray(json) ? { items: arrayItems(schemas, json) } : o),
           },
 
-          example: jsonToRef(json),
+          example: jsonToRef(schemas, json),
         },
       },
     };
   }
-  return exampleGenerator.parseRef(line);
+  return parseRef(schemas, line);
 };
 
-const jsonToObj = (exampleGenerator: ExampleGenerator, json: Record<string, any>) => ({
+const jsonToObj = (schemas: Schemas, json: Record<string, any>) => ({
   type: 'object',
   properties: Object.keys(json).reduce((acc, key) => {
     const t = typeof json[key];
     let value = json[key];
     const originalValue = json[key];
     if (t === 'object') {
-      value = jsonToObj(exampleGenerator, json[key]);
+      value = jsonToObj(schemas, json[key]);
     }
     if (t === 'string' && value.includes('<') && value.includes('>')) {
-      value = new ExampleGenerator({}).parseRef(value);
+      value = parseRef(schemas, value);
       if (originalValue.includes('[]')) {
         let ref = '';
         if (_.has(value, 'content.application/json.schema.$ref')) {
@@ -89,12 +89,12 @@ const jsonToObj = (exampleGenerator: ExampleGenerator, json: Record<string, any>
   }, {}),
 });
 
-const parseResponseBody = (exampleGenerator: ExampleGenerator, responseLine: string) => {
+const parseResponseBody = (schemas: Schemas, responseLine: string) => {
   const responses = {};
   const line = responseLine.replace('@responseBody ', '');
   const [status, res, desc] = line.split(' - ');
   if (typeof status === 'undefined') return;
-  responses[status] = parseBody(exampleGenerator, res || '', 'responseBody');
+  responses[status] = parseBody(schemas, res || '', 'responseBody');
   responses[status].description = desc;
   return responses;
 };
@@ -171,7 +171,7 @@ const parseResponseHeader = (options: AdonisOpenapiOptions, responseLine: string
   };
 };
 
-const parseRequestFormDataBody = (exampleGenerator: ExampleGenerator, rawLine: string) => {
+const parseRequestFormDataBody = (schemas: Schemas, rawLine: string) => {
   const line = rawLine.replace('@requestFormDataBody ', '');
   let json = {};
   const required = [];
@@ -183,9 +183,9 @@ const parseRequestFormDataBody = (exampleGenerator: ExampleGenerator, rawLine: s
     if (cleandRef === '') {
       return;
     }
-    const parsedRef = exampleGenerator.parseRef(line, true);
+    const parsedRef = parseRef(schemas, line, true);
     const props = [];
-    const ref = exampleGenerator.schemas[cleandRef];
+    const ref = schemas[cleandRef];
     const ks = [];
     if (ref.required && Array.isArray(ref.required)) required.push(...ref.required);
     Object.entries(ref.properties).map(([key, value]) => {
@@ -233,7 +233,7 @@ const parseRequestFormDataBody = (exampleGenerator: ExampleGenerator, rawLine: s
 };
 
 const parseAnnotations = (
-  exampleGenerator: ExampleGenerator,
+  schemas: Schemas,
   options: AdonisOpenapiOptions,
   lines: string[],
 ) => {
@@ -264,7 +264,7 @@ const parseAnnotations = (
     if (line.startsWith('@responseBody')) {
       responses = {
         ...responses,
-        ...parseResponseBody(exampleGenerator, line),
+        ...parseResponseBody(schemas, line),
       };
     }
     if (line.startsWith('@responseHeader')) {
@@ -279,10 +279,10 @@ const parseAnnotations = (
       };
     }
     if (line.startsWith('@requestBody')) {
-      requestBody = parseBody(exampleGenerator, line, 'requestBody');
+      requestBody = parseBody(schemas, line, 'requestBody');
     }
     if (line.startsWith('@requestFormDataBody')) {
-      const parsedBody = parseRequestFormDataBody(exampleGenerator, line);
+      const parsedBody = parseRequestFormDataBody(schemas, line);
       if (parsedBody) {
         requestBody = parsedBody;
       }
@@ -391,7 +391,7 @@ const parseParam = (options: AdonisOpenapiOptions, line: string) => {
 };
 
 export async function getAnnotations(
-  exampleGenerator: ExampleGenerator,
+  schemas: Schemas,
   options: AdonisOpenapiOptions,
   file: string,
   action: string,
@@ -427,7 +427,7 @@ export async function getAnnotations(
       if (lines[0].trim() !== `@${action}`) return;
       lines = lines.filter((l) => l !== '');
 
-      annotations[action] = parseAnnotations(exampleGenerator, options, lines);
+      annotations[action] = parseAnnotations(schemas, options, lines);
     });
   }
   return annotations;

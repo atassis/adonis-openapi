@@ -1,4 +1,4 @@
-import { exampleByField, exampleByType } from '../example-generator';
+import { exampleByField, exampleByType, Schemas } from '../example-generator';
 
 function objToExample(obj) {
   const example = {};
@@ -84,7 +84,7 @@ function parseType(type: string | any, field: string) {
   return prop;
 }
 
-function _getInheritedProperties(baseType: string, schemas: Record<string, any>): any {
+function _getInheritedProperties(baseType: string, schemas: Schemas): any {
   if (schemas[baseType]?.properties) {
     return {
       properties: schemas[baseType].properties,
@@ -121,7 +121,7 @@ function _getInheritedProperties(baseType: string, schemas: Record<string, any>)
 
   return { properties: {}, required: [] };
 }
-export function parseInterfaces(data: string, schemas: Record<string, any> = {}) {
+export function parseInterfaces(data: string, schemas: Schemas = {}) {
   data = data.replace(/\t/g, '').replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, '');
 
   let currentInterface = null;

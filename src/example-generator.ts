@@ -2,6 +2,8 @@ import { snakeCase } from 'lodash';
 
 import { getBetweenBrackets } from './helpers';
 
+export type Schemas = Record<string, any>;
+
 export function exampleByField(field: string, _type = '') {
   const ex = {
     datetime: '2021-03-23T16:13:08.489+01:00',
@@ -36,29 +38,6 @@ export function exampleByField(field: string, _type = '') {
     return ex[snakeCase(field)];
   }
   return null;
-}
-
-export function jsonToRef(json) {
-  const jsonObjectIsArray = Array.isArray(json);
-  const out = {};
-  const outArr = [];
-  for (let [k, v] of Object.entries(json)) {
-    if (typeof v === 'object') {
-      if (!Array.isArray(v)) {
-        v = jsonToRef(v);
-      }
-    }
-    if (typeof v === 'string') {
-      v = this.parseRef(v, true);
-    }
-
-    if (jsonObjectIsArray) {
-      outArr.push(v);
-    } else {
-      out[k] = v;
-    }
-  }
-  return outArr.length > 0 ? outArr.flat() : out;
 }
 
 export function exampleByType(type) {
@@ -106,290 +85,286 @@ function getPaginatedData(line: string): { dataName: string; metaName: string } 
   return { dataName, metaName };
 }
 
-export class ExampleGenerator {
-  public schemas = {};
-  constructor(schemas: any) {
-    this.schemas = schemas;
+export function getSchemaExampleBasedOnAnnotation(
+  schemas: Schemas,
+  schema: string,
+  inc = '',
+  exc = '',
+  onl = '',
+  first = '',
+  parent = '',
+  deepRels = [''],
+) {
+  const props = {};
+  if (!schemas[schema]) {
+    return props;
+  }
+  if (schemas[schema].example) {
+    return schemas[schema].example;
   }
 
-  jsonToRef(json) {
-    const jsonObjectIsArray = Array.isArray(json);
-    const out = {};
-    const outArr = [];
-    for (let [k, v] of Object.entries(json)) {
-      if (typeof v === 'object') {
-        if (!Array.isArray(v)) {
-          v = jsonToRef(v);
-        }
-      }
-      if (typeof v === 'string') {
-        v = this.parseRef(v, true);
-      }
+  const properties = schemas[schema].properties;
+  const include = inc.toString().split(',');
+  const exclude = exc.toString().split(',');
+  let only = onl.toString().split(',');
+  only = only.length === 1 && only[0] === '' ? [] : only;
 
-      if (jsonObjectIsArray) {
-        outArr.push(v);
-      } else {
-        out[k] = v;
-      }
-    }
-    return outArr.length > 0 ? outArr.flat() : out;
-  }
+  if (typeof properties === 'undefined') return null;
 
-  parseRef(line: string, exampleOnly = false) {
-    const rawRef = line.substring(line.indexOf('<') + 1, line.lastIndexOf('>'));
-
-    if (rawRef === '') {
-      if (exampleOnly) {
-        return line;
-      }
-      // No format valid, returning the line as text/plain
-      return {
-        content: {
-          'text/plain': {
-            example: line,
-          },
-        },
-      };
-    }
-
-    let inc = getBetweenBrackets(line, 'with');
-    let exc = getBetweenBrackets(line, 'exclude');
-    const append = getBetweenBrackets(line, 'append');
-    let only = getBetweenBrackets(line, 'only');
-    const paginated = getBetweenBrackets(line, 'paginated');
-    const serializer = getBetweenBrackets(line, 'serialized');
-
-    if (serializer) {
-      // we override to be sure
-      inc = '';
-      exc = '';
-      only = '';
-
-      if (this.schemas[serializer].fields.pick) {
-        only += this.schemas[serializer].fields.pick.join(',');
-      }
-      if (this.schemas[serializer].fields.omit) {
-        exc += this.schemas[serializer].fields.omit.join(',');
-      }
-      if (this.schemas[serializer].relations) {
-        // get relations names and add them to inc
-        const relations = Object.keys(this.schemas[serializer].relations);
-        inc = relations.join(',');
-
-        // we need to add the relation name to only and also we add the relation fields we want to only
-        // ex : comment,comment.id,comment.createdAt
-        relations.forEach((relation) => {
-          const relationFields = this.schemas[serializer].relations[relation].map(
-            (field) => `${relation}.${field}`,
-          );
-
-          only += `,${relation},${relationFields.join(',')}`;
-        });
-      }
-    }
-
-    let app = {};
-    try {
-      app = JSON.parse(`{${append}}`);
-    } catch {}
-
-    const cleanedRef = rawRef.replace('[]', '');
-
-    let ex = {};
-    try {
-      ex = Object.assign(this.getSchemaExampleBasedOnAnnotation(cleanedRef, inc, exc, only), app);
-    } catch (_e) {
-      console.error('Error', cleanedRef);
-    }
-
-    const { dataName, metaName } = getPaginatedData(line);
-
-    const paginatedEx = {
-      [dataName]: [ex],
-      [metaName]: this.getSchemaExampleBasedOnAnnotation('PaginationMeta'),
-    };
-
-    const paginatedSchema = {
-      type: 'object',
-      properties: {
-        [dataName]: {
-          type: 'array',
-          items: { $ref: `#/components/schemas/${cleanedRef}` },
-        },
-        [metaName]: { $ref: '#/components/schemas/PaginationMeta' },
-      },
-    };
-
-    const normalArraySchema = {
-      type: 'array',
-      items: { $ref: `#/components/schemas/${cleanedRef}` },
-    };
-
-    if (rawRef.includes('[]')) {
-      if (exampleOnly) {
-        return paginated === 'true' ? paginatedEx : [ex];
-      }
-      return {
-        content: {
-          'application/json': {
-            schema: paginated === 'true' ? paginatedSchema : normalArraySchema,
-            example: paginated === 'true' ? paginatedEx : [ex],
-          },
-        },
-      };
-    }
-    if (exampleOnly) {
-      return ex;
-    }
-
-    return {
-      content: {
-        'application/json': {
-          schema: {
-            $ref: `#/components/schemas/${rawRef}`,
-          },
-          example: ex,
-        },
-      },
-    };
-  }
-
-  getSchemaExampleBasedOnAnnotation(
-    schema: string,
-    inc = '',
-    exc = '',
-    onl = '',
-    first = '',
-    parent = '',
-    deepRels = [''],
+  // skip nested if not requested
+  if (
+    parent !== '' &&
+    schema !== '' &&
+    parent.includes('.') &&
+    schemas[schema].description.includes('Model') &&
+    !inc.includes('relations') &&
+    !inc.includes(parent) &&
+    !inc.includes(`${parent}.relations`) &&
+    !inc.includes(`${first}.relations`)
   ) {
-    const props = {};
-    if (!this.schemas[schema]) {
-      return props;
-    }
-    if (this.schemas[schema].example) {
-      return this.schemas[schema].example;
-    }
+    return null;
+  }
 
-    const properties = this.schemas[schema].properties;
-    const include = inc.toString().split(',');
-    const exclude = exc.toString().split(',');
-    let only = onl.toString().split(',');
-    only = only.length === 1 && only[0] === '' ? [] : only;
+  deepRels.push(schema);
 
-    if (typeof properties === 'undefined') return null;
+  for (const [key, value] of Object.entries(properties)) {
+    let isArray = false;
+    if (exclude.includes(key)) continue;
+    if (exclude.includes(`${parent}.${key}`)) continue;
 
-    // skip nested if not requested
+    if (key === 'password' && !include.includes('password') && !only.includes('password'))
+      continue;
     if (
-      parent !== '' &&
-      schema !== '' &&
-      parent.includes('.') &&
-      this.schemas[schema].description.includes('Model') &&
-      !inc.includes('relations') &&
-      !inc.includes(parent) &&
-      !inc.includes(`${parent}.relations`) &&
-      !inc.includes(`${first}.relations`)
-    ) {
-      return null;
+      key === 'password_confirmation' &&
+      !include.includes('password_confirmation') &&
+      !only.includes('password_confirmation')
+    )
+      continue;
+    if (
+      (key === 'created_at' || key === 'updated_at' || key === 'deleted_at') &&
+      exc.includes('timestamps')
+    )
+      continue;
+
+    let rel = '';
+    let example = value.example;
+
+    if (parent === '' && only.length > 0 && !only.includes(key)) continue;
+
+    // for relations we can select the fields we want with this syntax
+    // ex : comment.id,comment.createdAt
+    if (parent !== '' && only.length > 0 && !only.includes(`${parent}.${key}`)) continue;
+
+    if (typeof value.$ref !== 'undefined') {
+      rel = value.$ref.replace('#/components/schemas/', '');
     }
 
-    deepRels.push(schema);
+    if (typeof value.items !== 'undefined' && typeof value.items.$ref !== 'undefined') {
+      rel = value.items.$ref.replace('#/components/schemas/', '');
+    }
 
-    for (const [key, value] of Object.entries(properties)) {
-      let isArray = false;
-      if (exclude.includes(key)) continue;
-      if (exclude.includes(`${parent}.${key}`)) continue;
+    if (typeof value.items !== 'undefined') {
+      isArray = true;
+      example = value.items.example;
+    }
 
-      if (key === 'password' && !include.includes('password') && !only.includes('password'))
-        continue;
+    if (rel !== '') {
+      // skip related models of main schema
       if (
-        key === 'password_confirmation' &&
-        !include.includes('password_confirmation') &&
-        !only.includes('password_confirmation')
-      )
+        parent === '' &&
+        typeof schemas[rel] !== 'undefined' &&
+        schemas[rel].description?.includes('Model') &&
+        !include.includes('relations') &&
+        !include.includes(key)
+      ) {
         continue;
+      }
+
       if (
-        (key === 'created_at' || key === 'updated_at' || key === 'deleted_at') &&
-        exc.includes('timestamps')
-      )
+        parent !== '' &&
+        !include.includes(`${parent}.relations`) &&
+        !include.includes(`${parent}.${key}`)
+      ) {
         continue;
-
-      let rel = '';
-      let example = value.example;
-
-      if (parent === '' && only.length > 0 && !only.includes(key)) continue;
-
-      // for relations we can select the fields we want with this syntax
-      // ex : comment.id,comment.createdAt
-      if (parent !== '' && only.length > 0 && !only.includes(`${parent}.${key}`)) continue;
-
-      if (typeof value.$ref !== 'undefined') {
-        rel = value.$ref.replace('#/components/schemas/', '');
       }
 
       if (typeof value.items !== 'undefined' && typeof value.items.$ref !== 'undefined') {
         rel = value.items.$ref.replace('#/components/schemas/', '');
       }
-
-      if (typeof value.items !== 'undefined') {
-        isArray = true;
-        example = value.items.example;
+      if (rel === '') {
+        return;
       }
 
-      if (rel !== '') {
-        // skip related models of main schema
-        if (
-          parent === '' &&
-          typeof this.schemas[rel] !== 'undefined' &&
-          this.schemas[rel].description?.includes('Model') &&
-          !include.includes('relations') &&
-          !include.includes(key)
-        ) {
-          continue;
-        }
+      let propdata: any = '';
 
-        if (
-          parent !== '' &&
-          !include.includes(`${parent}.relations`) &&
-          !include.includes(`${parent}.${key}`)
-        ) {
-          continue;
-        }
+      // if (!deepRels.includes(rel)) {
+      // deepRels.push(rel);
+      propdata = getSchemaExampleBasedOnAnnotation(
+        schemas,
+        rel,
+        inc,
+        exc,
+        onl,
+        parent,
+        parent === '' ? key : `${parent}.${key}`,
+        deepRels,
+      );
 
-        if (typeof value.items !== 'undefined' && typeof value.items.$ref !== 'undefined') {
-          rel = value.items.$ref.replace('#/components/schemas/', '');
-        }
-        if (rel === '') {
-          return;
-        }
+      if (propdata === null) {
+        continue;
+      }
 
-        let propdata: any = '';
+      props[key] = isArray ? [propdata] : propdata;
+    } else {
+      props[key] = isArray ? [example] : example;
+    }
+  }
 
-        // if (!deepRels.includes(rel)) {
-        // deepRels.push(rel);
-        propdata = this.getSchemaExampleBasedOnAnnotation(
-          rel,
-          inc,
-          exc,
-          onl,
-          parent,
-          parent === '' ? key : `${parent}.${key}`,
-          deepRels,
-        );
+  return props;
+}
 
-        if (propdata === null) {
-          continue;
-        }
-
-        props[key] = isArray ? [propdata] : propdata;
-      } else {
-        props[key] = isArray ? [example] : example;
+export function jsonToRef(schemas: Schemas, json) {
+  const jsonObjectIsArray = Array.isArray(json);
+  const out = {};
+  const outArr = [];
+  for (let [k, v] of Object.entries(json)) {
+    if (typeof v === 'object') {
+      if (!Array.isArray(v)) {
+        v = jsonToRef(schemas, v);
       }
     }
+    if (typeof v === 'string') {
+      v = parseRef(schemas, v, true);
+    }
 
-    return props;
+    if (jsonObjectIsArray) {
+      outArr.push(v);
+    } else {
+      out[k] = v;
+    }
   }
+  return outArr.length > 0 ? outArr.flat() : out;
 }
+
+export function parseRef(schemas: Schemas, line: string, exampleOnly = false) {
+  const rawRef = line.substring(line.indexOf('<') + 1, line.lastIndexOf('>'));
+
+  if (rawRef === '') {
+    if (exampleOnly) {
+      return line;
+    }
+    // No format valid, returning the line as text/plain
+    return {
+      content: {
+        'text/plain': {
+          example: line,
+        },
+      },
+    };
+  }
+
+  let inc = getBetweenBrackets(line, 'with');
+  let exc = getBetweenBrackets(line, 'exclude');
+  const append = getBetweenBrackets(line, 'append');
+  let only = getBetweenBrackets(line, 'only');
+  const paginated = getBetweenBrackets(line, 'paginated');
+  const serializer = getBetweenBrackets(line, 'serialized');
+
+  if (serializer) {
+    // we override to be sure
+    inc = '';
+    exc = '';
+    only = '';
+
+    if (schemas[serializer].fields.pick) {
+      only += schemas[serializer].fields.pick.join(',');
+    }
+    if (schemas[serializer].fields.omit) {
+      exc += schemas[serializer].fields.omit.join(',');
+    }
+    if (schemas[serializer].relations) {
+      // get relations names and add them to inc
+      const relations = Object.keys(schemas[serializer].relations);
+      inc = relations.join(',');
+
+      // we need to add the relation name to only and also we add the relation fields we want to only
+      // ex : comment,comment.id,comment.createdAt
+      relations.forEach((relation) => {
+        const relationFields = schemas[serializer].relations[relation].map(
+          (field) => `${relation}.${field}`,
+        );
+
+        only += `,${relation},${relationFields.join(',')}`;
+      });
+    }
+  }
+
+  let app = {};
+  try {
+    app = JSON.parse(`{${append}}`);
+  } catch {}
+
+  const cleanedRef = rawRef.replace('[]', '');
+
+  let ex = {};
+  try {
+    ex = Object.assign(getSchemaExampleBasedOnAnnotation(schemas, cleanedRef, inc, exc, only), app);
+  } catch (_e) {
+    console.error('Error', cleanedRef);
+  }
+
+  const { dataName, metaName } = getPaginatedData(line);
+
+  const paginatedEx = {
+    [dataName]: [ex],
+    [metaName]: getSchemaExampleBasedOnAnnotation(schemas, 'PaginationMeta'),
+  };
+
+  const paginatedSchema = {
+    type: 'object',
+    properties: {
+      [dataName]: {
+        type: 'array',
+        items: { $ref: `#/components/schemas/${cleanedRef}` },
+      },
+      [metaName]: { $ref: '#/components/schemas/PaginationMeta' },
+    },
+  };
+
+  const normalArraySchema = {
+    type: 'array',
+    items: { $ref: `#/components/schemas/${cleanedRef}` },
+  };
+
+  if (rawRef.includes('[]')) {
+    if (exampleOnly) {
+      return paginated === 'true' ? paginatedEx : [ex];
+    }
+    return {
+      content: {
+        'application/json': {
+          schema: paginated === 'true' ? paginatedSchema : normalArraySchema,
+          example: paginated === 'true' ? paginatedEx : [ex],
+        },
+      },
+    };
+  }
+  if (exampleOnly) {
+    return ex;
+  }
+
+  return {
+    content: {
+      'application/json': {
+        schema: {
+          $ref: `#/components/schemas/${rawRef}`,
+        },
+        example: ex,
+      },
+    },
+  };
+}
+
 export const paginationInterface = () => ({
   PaginationMeta: {
     type: 'object',

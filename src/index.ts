@@ -7,7 +7,7 @@ import YAML from 'json-to-pretty-yaml';
 import { isEmpty, isUndefined, uniq } from 'lodash';
 
 import { serializeV6Handler, serializeV6Middleware } from './adonisjs-helpers';
-import { ExampleGenerator, paginationInterface } from './example-generator';
+import { paginationInterface, Schemas } from './example-generator';
 import { formatOperationId, mergeParams } from './helpers';
 import { getAnnotations } from './parsers/comment-parser';
 import { parseEnums } from './parsers/enum-parser';
@@ -136,7 +136,7 @@ async function getDataBasedOnAdonisVersion(
   route: AdonisRoute,
   customPaths: CustomPaths,
   options: AdonisOpenapiOptions,
-  schemas: Record<string, any>,
+  schemas: Schemas,
 ) {
   let sourceFile = '';
   let action = '';
@@ -196,7 +196,7 @@ async function getDataBasedOnAdonisVersion(
     sourceFile = sourceFile.replace('.js', '');
 
     customAnnotations = await getAnnotations(
-      new ExampleGenerator(schemas),
+      schemas,
       options,
       sourceFile,
       action,
