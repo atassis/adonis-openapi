@@ -1,4 +1,4 @@
-import type { AdonisOpenapiOptions } from '../types';
+import type { AdonisOpenapiOptions } from '../types.js';
 
 /*
    extract path-variables, tags and the uri-pattern

@@ -1,6 +1,5 @@
-import { snakeCase } from 'lodash';
-
-import { getBetweenBrackets } from './helpers';
+import { getNumber } from './example-number-iterator.js';
+import { getBetweenBrackets, snakeCase } from './utils.js';
 
 export type Schemas = Record<string, any>;
 
@@ -45,13 +44,11 @@ export function exampleByType(type) {
     case 'string':
       return exampleByField('title');
     case 'number':
-      return Math.floor(Math.random() * 1000);
     case 'integer':
-      return Math.floor(Math.random() * 1000);
+      return getNumber();
     case 'boolean':
       return true;
     case 'DateTime':
-      return exampleByField('datetime');
     case 'datetime':
       return exampleByField('datetime');
     case 'date':

@@ -1,4 +1,4 @@
-import { startCase } from 'lodash';
+import { startCase } from '../utils.js';
 
 // Remove quotes and comma
 const parseEnumValue = (value: string): string => value.replace(/['",]/g, '').trim();

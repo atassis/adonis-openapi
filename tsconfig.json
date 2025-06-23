@@ -1,12 +1,13 @@
 {
   "compilerOptions": {
-    "lib": ["ES2022"],
-    "target": "ES2022",
+    "lib": ["ESNext"],
+    "target": "ESNext",
     "module": "NodeNext",
     "declaration": true,
     "moduleResolution": "nodenext",
     "outDir": "./dist",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "isolatedModules": true
   },
   "skipLibCheck": true,
   "include": ["src/**/*"]

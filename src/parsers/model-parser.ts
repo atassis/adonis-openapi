@@ -1,8 +1,7 @@
-import { snakeCase } from 'lodash';
-
-import { exampleByField, exampleByType } from '../example-generator';
-import { getBetweenBrackets, isJSONString } from '../helpers';
-import { standardTypes } from '../types';
+import { exampleByField, exampleByType } from '../example-generator.js';
+import { getNumber } from '../example-number-iterator.js';
+import { standardTypes } from '../types.js';
+import { getBetweenBrackets, isJSONString, snakeCase } from '../utils.js';
 
 export function parseModelProperties(makeSnakeCase: boolean, argData: string) {
   const props = {};
@@ -200,7 +199,7 @@ export function parseModelProperties(makeSnakeCase: boolean, argData: string) {
     const prop = {};
     if (type === 'integer' || type === 'number') {
       if (example === null || example === 'string') {
-        example = Math.floor(Math.random() * 1000);
+        example = getNumber();
       }
     }
     if (type === 'boolean') {
@@ -230,7 +229,7 @@ export function parseModelProperties(makeSnakeCase: boolean, argData: string) {
     props.deleted_at = {
       type: 'string',
       format: 'date-time',
-      example: '2021-03-23T16:13:08.489+01:00',
+      example: exampleByField('datetime'),
     };
   }
 

@@ -1,38 +1,4 @@
-import { exampleByField, exampleByType, Schemas } from '../example-generator';
-
-function objToExample(obj) {
-  const example = {};
-  Object.entries(obj).map(([key, value]) => {
-    if (typeof value === 'object') {
-      example[key] = objToExample(value);
-    } else {
-      example[key] = exampleByType(value as string);
-      if (example[key] === null) {
-        example[key] = exampleByField(key);
-      }
-    }
-  });
-  return example;
-}
-
-function _parseProps(obj) {
-  const no = {};
-  Object.entries(obj).map(([f, value]) => {
-    if (typeof value === 'object') {
-      no[f.replaceAll('?', '')] = {
-        type: 'object',
-        nullable: f.includes('?'),
-        properties: _parseProps(value),
-        example: objToExample(value),
-      };
-    } else {
-      no[f.replaceAll('?', '')] = {
-        ...parseType(value, f),
-      };
-    }
-  });
-  return no;
-}
+import { exampleByField, exampleByType, Schemas } from '../example-generator.js';
 
 function parseType(type: string | any, field: string) {
   if (typeof type === 'object' && type !== null && 'type' in type) {
@@ -56,7 +22,7 @@ function parseType(type: string | any, field: string) {
   if (typeof type === 'string' && type.toLowerCase() === 'datetime') {
     prop.type = 'string';
     prop.format = 'date-time';
-    prop.example = '2021-03-23T16:13:08.489+01:00';
+    prop.example = exampleByField('datetime');
   } else if (typeof type === 'string' && type.toLowerCase() === 'date') {
     prop.type = 'string';
     prop.format = 'date';
@@ -84,43 +50,6 @@ function parseType(type: string | any, field: string) {
   return prop;
 }
 
-function _getInheritedProperties(baseType: string, schemas: Schemas): any {
-  if (schemas[baseType]?.properties) {
-    return {
-      properties: schemas[baseType].properties,
-      required: schemas[baseType].required || [],
-    };
-  }
-
-  const cleanType = baseType.split('/').pop()?.replace('.ts', '')?.replace(/^[#@]/, '');
-
-  if (!cleanType) return { properties: {}, required: [] };
-
-  if (schemas[cleanType]?.properties) {
-    return {
-      properties: schemas[cleanType].properties,
-      required: schemas[cleanType].required || [],
-    };
-  }
-
-  const variations = [
-    cleanType,
-    `#models/${cleanType}`,
-    cleanType.replace(/Model$/, ''),
-    `${cleanType}Model`,
-  ];
-
-  for (const variation of variations) {
-    if (schemas[variation]?.properties) {
-      return {
-        properties: schemas[variation].properties,
-        required: schemas[variation].required || [],
-      };
-    }
-  }
-
-  return { properties: {}, required: [] };
-}
 export function parseInterfaces(data: string, schemas: Schemas = {}) {
   data = data.replace(/\t/g, '').replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, '');
 

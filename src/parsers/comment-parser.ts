@@ -2,9 +2,21 @@ import { readFile } from 'node:fs/promises';
 import extract from 'extract-comments';
 import HTTPStatusCode from 'http-status-code';
 
-import { jsonToRef, parseRef, Schemas } from '../example-generator';
-import { getBetweenBrackets, isJSONString } from '../helpers';
-import { AdonisOpenapiOptions } from '../types';
+import { jsonToRef, parseRef, Schemas } from '../example-generator.js';
+import { AdonisOpenapiOptions } from '../types.js';
+import { getBetweenBrackets, has, isJSONString } from '../utils.js';
+
+export type Param = {
+  in: string;
+  name: string;
+  description: string;
+  schema: {
+    example: string;
+    enum?: string[];
+    type: string;
+  };
+  required: boolean;
+};
 
 const arrayItems = (schemas: Schemas, json) => {
   const oneOf = [];
@@ -15,7 +27,7 @@ const arrayItems = (schemas: Schemas, json) => {
     json.forEach((j) => {
       const value = parseRef(schemas, j);
 
-      if (_.has(value, 'content.application/json.schema.$ref')) {
+      if (has(value, 'content.application/json.schema.$ref')) {
         oneOf.push({
           $ref: value.content['application/json'].schema.$ref,
         });
@@ -67,10 +79,10 @@ const jsonToObj = (schemas: Schemas, json: Record<string, any>) => ({
       value = parseRef(schemas, value);
       if (originalValue.includes('[]')) {
         let ref = '';
-        if (_.has(value, 'content.application/json.schema.$ref')) {
+        if (has(value, 'content.application/json.schema.$ref')) {
           ref = value.content['application/json'].schema.$ref;
         }
-        if (_.has(value, 'content.application/json.schema.items.$ref')) {
+        if (has(value, 'content.application/json.schema.items.$ref')) {
           ref = value.content['application/json'].schema.items.$ref;
         }
         value = {
@@ -104,7 +116,7 @@ const parseResponseHeader = (options: AdonisOpenapiOptions, responseLine: string
   let description = '';
   let example: any = '';
   let type = 'string';
-  const enums = [];
+
   const line = responseLine.replace('@responseHeader ', '');
   const [status, name, desc, meta] = line.split(' - ');
 
@@ -161,9 +173,6 @@ const parseResponseHeader = (options: AdonisOpenapiOptions, responseLine: string
     description: description,
   };
 
-  if (enums.length > 1) {
-    h.schema.enum = enums;
-  }
   return {
     status: status,
     header: {
@@ -185,26 +194,26 @@ const parseRequestFormDataBody = (schemas: Schemas, rawLine: string) => {
       return;
     }
     const parsedRef = parseRef(schemas, line, true);
-    const props = [];
+    const props: Record<string, { type: string; format: string }> = {};
     const ref = schemas[cleandRef];
     const ks = [];
     if (ref.required && Array.isArray(ref.required)) required.push(...ref.required);
-    Object.entries(ref.properties).map(([key, value]) => {
-      if (typeof parsedRef[key] === 'undefined') {
-        return;
-      }
-      ks.push(key);
-      if (value.required) required.push(key);
-      props.push({
-        [key]: {
+    for (const [key, value] of Object.entries(ref.properties)) {
+      if (typeof parsedRef[key] !== 'undefined') {
+        ks.push(key);
+        if (value.required) {
+          required.push(key);
+        }
+
+        props[key] = {
           type: typeof value.type === 'undefined' ? 'string' : value.type,
           format: typeof value.format === 'undefined' ? 'string' : value.format,
-        },
-      });
-    });
-    const p = props.reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        };
+      }
+    }
+
     const appends = Object.keys(parsedRef).filter((k) => !ks.includes(k));
-    json = p;
+    json = props;
     if (appends.length > 0) {
       appends.forEach((a) => {
         json[a] = parsedRef[a];
@@ -237,34 +246,27 @@ const parseAnnotations = (schemas: Schemas, options: AdonisOpenapiOptions, lines
   let summary = '';
   let tag = '';
   let description = '';
-  let operationId;
+  let operationId: string | undefined;
   let responses = {};
   let requestBody;
-  let parameters = {};
+  const parameters: Record<string, Param> = {};
   const headers = {};
-  lines.forEach((line) => {
+
+  for (const line of lines) {
     if (line.startsWith('@summary')) {
       summary = line.replace('@summary ', '');
-    }
-    if (line.startsWith('@tag')) {
+    } else if (line.startsWith('@tag')) {
       tag = line.replace('@tag ', '');
-    }
-
-    if (line.startsWith('@description')) {
+    } else if (line.startsWith('@description')) {
       description = line.replace('@description ', '');
-    }
-
-    if (line.startsWith('@operationId')) {
+    } else if (line.startsWith('@operationId')) {
       operationId = line.replace('@operationId ', '');
-    }
-
-    if (line.startsWith('@responseBody')) {
+    } else if (line.startsWith('@responseBody')) {
       responses = {
         ...responses,
         ...parseResponseBody(schemas, line),
       };
-    }
-    if (line.startsWith('@responseHeader')) {
+    } else if (line.startsWith('@responseHeader')) {
       const header = parseResponseHeader(options, line);
       if (header === null) {
         console.error(`Error with line: ${line}`);
@@ -274,23 +276,23 @@ const parseAnnotations = (schemas: Schemas, options: AdonisOpenapiOptions, lines
         ...headers[header.status],
         ...header.header,
       };
-    }
-    if (line.startsWith('@requestBody')) {
+    } else if (line.startsWith('@requestBody')) {
       requestBody = parseBody(schemas, line, 'requestBody');
-    }
-    if (line.startsWith('@requestFormDataBody')) {
+    } else if (line.startsWith('@requestFormDataBody')) {
       const parsedBody = parseRequestFormDataBody(schemas, line);
       if (parsedBody) {
         requestBody = parsedBody;
       }
+    } else if (line.startsWith('@param')) {
+      const parsedParams = parseParam(options, line);
+      for (const [key, parsedParam] of parsedParams) {
+        parameters[key] = parsedParam;
+      }
     }
-    if (line.startsWith('@param')) {
-      parameters = { ...parameters, ...parseParam(options, line) };
-    }
-  });
+  }
 
   for (const [key, _value] of Object.entries(responses)) {
-    if (typeof headers[key] !== undefined) {
+    if (typeof headers[key] !== 'undefined') {
       responses[key].headers = headers[key];
     }
     if (!responses[key].description) {
@@ -310,7 +312,8 @@ const parseAnnotations = (schemas: Schemas, options: AdonisOpenapiOptions, lines
     tag,
   };
 };
-const parseParam = (options: AdonisOpenapiOptions, line: string) => {
+
+const parseParam = (options: AdonisOpenapiOptions, line: string): [string, Param][] => {
   let where = 'path';
   let required = true;
   let type = 'string';
@@ -318,18 +321,21 @@ const parseParam = (options: AdonisOpenapiOptions, line: string) => {
   let enums = [];
 
   if (line.startsWith('@paramUse')) {
-    const use = getBetweenBrackets(line, 'paramUse');
-    const used = use.split(',');
-    let h = [];
-    used.forEach((u) => {
-      if (typeof options.common.parameters[u] === 'undefined') {
-        return;
-      }
-      const common = options.common.parameters[u];
-      h = [...h, ...common];
-    });
-
-    return h;
+    return getBetweenBrackets(line, 'paramUse')
+      .split(',')
+      .reduce((acc, u) => {
+        if (typeof options.common.parameters[u] !== 'undefined') {
+          const common = options.common.parameters[u];
+          if (Array.isArray(common)) {
+            for (const param of common) {
+              acc.push([param.name, param]);
+            }
+          } else {
+            acc.push([common.name, common]);
+          }
+        }
+        return acc;
+      }, []);
   }
 
   if (line.startsWith('@paramPath')) {
@@ -369,7 +375,7 @@ const parseParam = (options: AdonisOpenapiOptions, line: string) => {
     }
   }
 
-  const p = {
+  const p: Param = {
     in: where,
     name: param,
     description: des,
@@ -384,7 +390,7 @@ const parseParam = (options: AdonisOpenapiOptions, line: string) => {
     p.schema.enum = enums;
   }
 
-  return { [param]: p };
+  return [[param, p]];
 };
 
 export async function getAnnotations(

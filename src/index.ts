@@ -4,19 +4,18 @@ import { join } from 'node:path';
 import { VineValidator } from '@vinejs/vine';
 import HTTPStatusCode from 'http-status-code';
 import YAML from 'json-to-pretty-yaml';
-import { isEmpty, isUndefined, uniq } from 'lodash';
 
-import { serializeV6Handler, serializeV6Middleware } from './adonisjs-helpers';
-import { paginationInterface, Schemas } from './example-generator';
-import { formatOperationId, mergeParams } from './helpers';
-import { getAnnotations } from './parsers/comment-parser';
-import { parseEnums } from './parsers/enum-parser';
-import { parseInterfaces } from './parsers/interface-parser';
-import { parseModelProperties } from './parsers/model-parser';
-import { extractRouteInfos } from './parsers/route-parser';
-import { validatorToObject } from './parsers/validator-parser';
-import { scalarCustomCss } from './scalar-custom-css';
-import type { AdonisOpenapiOptions, AdonisRoute, AdonisRoutes, v6Handler } from './types';
+import { serializeV6Handler, serializeV6Middleware } from './adonisjs-helpers.js';
+import { paginationInterface, Schemas } from './example-generator.js';
+import { getAnnotations } from './parsers/comment-parser.js';
+import { parseEnums } from './parsers/enum-parser.js';
+import { parseInterfaces } from './parsers/interface-parser.js';
+import { parseModelProperties } from './parsers/model-parser.js';
+import { extractRouteInfos } from './parsers/route-parser.js';
+import { validatorToObject } from './parsers/validator-parser.js';
+import { scalarCustomCss } from './scalar-custom-css.js';
+import type { AdonisOpenapiOptions, AdonisRoute, AdonisRoutes, v6Handler } from './types.js';
+import { formatOperationId, isEmpty, isUndefined, mergeParams, uniq } from './utils.js';
 
 export type { AdonisOpenapiOptions };
 
