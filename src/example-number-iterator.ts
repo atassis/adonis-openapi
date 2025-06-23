@@ -1,3 +1,3 @@
-let counter = 0;
+let counter = 1;
 
 export const getNumber = () => counter++;
