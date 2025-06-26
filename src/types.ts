@@ -1,29 +1,41 @@
+export type OpenapiInfo = {
+  title?: string;
+  version?: string;
+  description?: string;
+}
 /**
  * AdonisOpenapi interfaces
  */
 export interface AdonisOpenapiOptions {
-  title?: string;
-  ignore: string[];
-  version?: string;
-  description?: string;
-  path: string;
-  tagIndex: number;
-  snakeCase: boolean;
-  common: common;
-  fileNameInSummary?: boolean;
-  preferredPutPatch?: string;
-  persistAuthorization?: boolean;
   appPath?: string;
-  debug?: boolean;
-  info?: any;
-  securitySchemes?: any;
-  productionEnv?: string;
   authMiddlewares?: string[];
+  common: OpenapiCommonOptions;
+  debug?: boolean;
   defaultSecurityScheme?: string;
+  fileNameInSummary?: boolean;
+  ignore: string[];
+  info?: OpenapiInfo;
+  /*
+   * Callback function to modify the generated OpenAPI specification before it is written to the output file.
+   * @param docs The generated OpenAPI specification.
+   * @returns The modified OpenAPI specification.
+   */
+  onPreGenerate?: (docs: any) => Promise<any> | any;
+  /*
+   * Output file extensions for the generated OpenAPI specification.
+   * @default 'both'
+   */
   outputFileExtensions?: 'both' | 'json' | 'yaml';
+  path: string;
+  persistAuthorization?: boolean;
+  preferredPutPatch?: string;
+  productionEnv?: string;
+  securitySchemes?: any;
+  snakeCase: boolean;
+  tagIndex: number;
 }
 
-export interface common {
+export interface OpenapiCommonOptions {
   headers: any;
   parameters: any;
 }
@@ -43,7 +55,7 @@ export interface AdonisRouteMeta {
   }>;
 }
 
-export interface v6Handler {
+export interface V6Handler {
   method?: string;
   moduleNameOrPath?: string;
   reference: string | any[];
@@ -57,7 +69,7 @@ export interface AdonisRoute {
   middleware: string[] | any;
   name?: string;
   params: string[];
-  handler?: string | v6Handler;
+  handler?: string | V6Handler;
 }
 
 export interface AdonisRoutes {
